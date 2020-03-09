@@ -1,0 +1,33 @@
+#pragma once
+
+// lang::CwC
+
+#include "../lib.h"
+#include "{{snakeName}}_list.h"
+
+/**
+ * {{name}}ListPacker: a class which packs and unpacks {{name}}List objects
+ * using BytesWriter and BytesReader objects
+ * authors: @grahamwren, @jagen31
+ */
+class {{name}}ListPacker : public Object {
+public:
+  static void pack(const {{name}}List &list, BytesWriter &writer) {
+    writer.pack('L'); // pack type tag
+    int len = list.size();
+    writer.pack(len); // pack length tag
+    for (int i = 0; i < len; i++) {
+      writer.pack(list.get(i));
+    }
+  }
+
+  static {{name}}List unpack(BytesReader &reader) {
+    assert(reader.yield_char() == 'L');
+    int len = reader.yield_int();
+    {{name}}List result(len);
+    for (int i = 0; i < len; i++) {
+      result.push(reader.yield_{{snakeName}}());
+    }
+    return result; // move
+  }
+};

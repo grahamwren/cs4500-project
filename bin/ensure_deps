@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+echo_err () {
+  echo "$@" >&2
+}
+
+missing_dep=0
+
+# might be a builtin, so this might be unnecessary
+if ! which awk >/dev/null; then
+  echo_err "Missing dependency awk, please install."
+  missing_dep=1
+fi
+
+if ! which mustache >/dev/null; then
+  echo_err "Missing dependency mustache, please install. See https://mustache.github.io"
+  missing_dep=1
+fi
+
+if ! which node >/dev/null; then
+  echo_err "Missing dependency node, please install. See https://www.npmjs.com/get-npm"
+  missing_dep=1
+fi
+
+if ! node -e "require('lodash')" 2>/dev/null; then
+  echo_err "Missing dependency lodash, please install: $ npm i -g lodash"
+  missing_dep=1
+fi
+
+exit $missing_dep

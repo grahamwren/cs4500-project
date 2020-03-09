@@ -1,0 +1,96 @@
+# pragma once
+
+#include "../lib.h"
+#include "{{snakeName}}_list.h"
+#include "{{snakeName}}_ptr_list.h"
+
+#define BLOCK_LEN 1024
+
+/*************************************************************************
+ * {{name}}BlockList::
+ * Manages blocks of elements of type {{type}}
+ * authors: @grahamwren, @jagen31
+ */
+class {{name}}BlockList : public {{name}}List {
+public:
+  {{name}}PtrList *_blocks;
+
+  {{name}}BlockList() { _blocks = new {{name}}PtrList(); }
+  ~{{name}}BlockList() {
+    for ({{name}}PtrListIter iter(*_blocks); !iter.empty();) {
+      delete[] iter.next();
+    }
+    delete _blocks;
+  }
+
+  void push({{type}} val) {
+    hash_ = 0; // reset hash because mutates
+    int block_index  = size() / BLOCK_LEN;
+    int block_offset = size() % BLOCK_LEN;
+
+    if (block_offset == 0) {
+      // we need a new block!
+      assert(_blocks->size() == block_index);
+      _blocks->push(new {{type}}[BLOCK_LEN]);
+    }
+
+    _size++;
+    _blocks->get(block_index)[block_offset] = val;
+  }
+
+  {{type}} pop() {
+    assert(size() > 0);
+    hash_ = 0; // reset hash because mutates
+    int block_index  = size() / BLOCK_LEN;
+    int block_offset = (size() - 1) % BLOCK_LEN;
+    {{type}} element = _blocks->get(block_index)[block_offset];
+    if (block_offset == 0) {
+      {{type}}* block = _blocks->pop();
+      delete[] block;
+    }
+    _size--;
+    return element;
+  }
+
+  // move is not supported for block lists
+  void move(int n, int f, int t) { assert(false); }
+
+  {{type}} &get(int rel_idx) const {
+    int idx = _resolve_index(rel_idx);
+    int block_index  = idx / BLOCK_LEN;
+    int block_offset = idx % BLOCK_LEN;
+    return _blocks->get(block_index)[block_offset];
+  }
+
+  /**
+   * Returns the string at idx; undefined on invalid idx.
+   */
+  {{type}} set(int rel_idx, {{type}} val) { 
+    int idx = _resolve_index(rel_idx);
+    int block_index  = idx / BLOCK_LEN;
+    int block_offset = idx % BLOCK_LEN;
+    {{type}} e = get(idx);
+    _blocks->get(block_index)[block_offset] = val;
+    return e;
+  }
+
+  void ensure_space(int requested_size) {
+    if (requested_size == 0) return;
+
+    int block_count = ceil(requested_size / (float)BLOCK_LEN);
+    _blocks->ensure_space(block_count);
+  }
+
+  void clear() {
+    _size = 0;            // set size to 0
+    hash_ = 0;            // reset hash val
+    for ({{name}}PtrListIter iter(*_blocks); !iter.empty(); iter.next()) {
+      delete iter.peek(); // free all blocks
+    }
+    _blocks->clear();     // clear blocks list
+  }
+
+  void _debug_name() { p("{{name}}BlockList"); }
+  void _debug_meta() { p("blocks: ").p(_blocks->size()).p(", "); }
+};
+

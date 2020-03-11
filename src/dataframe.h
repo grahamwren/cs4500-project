@@ -1,7 +1,10 @@
 #pragma once
 
-#include "../lib.h"
 #include "column_ptr_list.h"
+#include "row.h"
+#include "rower.h"
+#include "schema.h"
+#include "thread.h"
 
 #ifndef THREAD_COUNT
 #define THREAD_COUNT 8

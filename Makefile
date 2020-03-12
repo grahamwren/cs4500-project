@@ -2,7 +2,7 @@ CC=g++
 CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-return-type
 CPATH=generated_code:src
 
-SHARED_HEADER_FILES=generated_code/* src/*
+SHARED_HEADER_FILES=src/*
 BUILD_DIR=build
 
 run: build

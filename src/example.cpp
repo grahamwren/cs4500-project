@@ -9,7 +9,7 @@ public:
   Parser(int len, char *bytes) {}
 
   bool parse_file(DataFrame &df) { return false; }
-}
+};
 
 using namespace std;
 
@@ -40,8 +40,8 @@ int main(int argc, char **argv) {
   for (int i = 0; i < df.ncols(); i++) {
     Schema &scm = df.get_schema();
     if (scm.col_type(i) == 'I' || scm.col_type(i) == 'F') {
-      first_i_col = i;
-      col_type = df.col_type(i);
+      first_num_col = i;
+      col_type = df.get_schema().col_type(i);
     }
   }
   if (col_type == 'I') {
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 25; i++) {
       cout << "| ";
       if (i < df.nrows()) {
-        cout << df.get_int(first_num_col, i);
+        cout << df.get<int>(first_num_col, i);
       } else {
         cout << " ";
       }
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 25; i++) {
       cout << "| ";
       if (i < df.nrows()) {
-        cout << df.get_float(first_num_col, i);
+        cout << df.get<float>(first_num_col, i);
       } else {
         cout << "-";
       }
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     void join_delete(Rower *o) {
       SumIntRower *other = dynamic_cast<SumIntRower *>(o);
       assert(other);
-      sum += other.sum;
+      sum += other->sum;
       delete o;
     }
   };

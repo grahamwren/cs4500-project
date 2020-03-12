@@ -2,7 +2,11 @@
 
 // lang::CwC
 
-#include "../lib.h"
+#include "bytes_reader.h"
+#include "bytes_writer.h"
+#include "fielder.h"
+#include "object.h"
+#include "schema.h"
 #include <stdlib.h>
 
 /*************************************************************************
@@ -20,7 +24,7 @@ public:
     bool b;
     int i;
     float f;
-    String *s;
+    string *s;
   };
 
   int _width;
@@ -84,7 +88,7 @@ public:
   /**
    * Acquire ownership of the string.
    */
-  void set(size_t col, String *val) {
+  void set(size_t col, string *val) {
     assert(col < width());
     _data[col].s = val;
   }
@@ -107,7 +111,7 @@ public:
 
   float get_float(size_t col) { return _data[col].f; }
 
-  String *get_string(size_t col) { return _data[col].s; }
+  string *get_string(size_t col) { return _data[col].s; }
   /**
    * Number of fields in the row.
    */
@@ -170,7 +174,7 @@ public:
           return false;
         }
       } else {
-        if (!get_string(i)->equals(other->get_string(i))) {
+        if (get_string(i)->compare(*other->get_string(i)) != 0) {
           return false;
         }
       }
@@ -232,7 +236,7 @@ public:
         break;
       }
       case 'S': {
-        // TODO: Not clear who owns this allocated String
+        // TODO: Not clear who owns this allocated string
         data[i].s = reader.yield_string_ptr();
         break;
       }

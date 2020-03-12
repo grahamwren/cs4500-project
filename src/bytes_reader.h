@@ -2,8 +2,6 @@
 
 // lang::CwC
 
-#include "lib.h"
-
 /**
  * a class which consumes a bytes array of a known length and allows extraction
  * of known types through yield and peek methods
@@ -68,13 +66,13 @@ public:
   }
 
   /**
-   * allocates a String object to contain the next char[] type object in the
+   * allocates a string object to contain the next char[] type object in the
    * buffer
    *
    * TODO: should be a move, not an allocation
    */
-  String *yield_string_ptr() {
-    String *s = peek_string();
+  string *yield_string_ptr() {
+    string *s = peek_string();
     /* move forward: sizeof(len) + len of string (not including null term) */
     position += sizeof(int) + (s->size() * sizeof(char));
     return s;
@@ -131,17 +129,17 @@ public:
   }
 
   /**
-   * allocates a String and copies the next char[] into it. Returned String
+   * allocates a string and copies the next char[] into it. Returned string
    * owned by caller
    *
    * TODO: should be a move rather than a heap allocation. However, CwC
    * missing move constructors
    */
-  String *peek_string() const {
+  string *peek_string() const {
     const int &len = peek_int();
     char buf[len + 1];
     peek_c_arr(buf);
-    return new String(buf, len);
+    return new string(buf, len);
   }
 
   bool empty() const { return position == length; }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "object.h"
+
 // lang:CwC
 
 /*****************************************************************************
@@ -20,7 +22,7 @@ public:
   virtual void accept(bool b) {}
   virtual void accept(float f) {}
   virtual void accept(int i) {}
-  virtual void accept(String *s) {}
+  virtual void accept(string *s) {}
 
   /**
    * Called when all fields have been seen.

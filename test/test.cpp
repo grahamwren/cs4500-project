@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "test_column.h"
+#include "test_schema.h"
 
 // #include "test_bytes_writer.h"
 // #include "test_bytes_reader.h"

@@ -12,8 +12,8 @@
  * The valid types are represented by the chars 'S', 'B', 'I' and 'F'.
  */
 class Schema {
-  List<char> types;
-  List<string *> columns;
+  vector<char> types;
+  vector<string *> columns;
 
 public:
   Schema() = default;
@@ -42,26 +42,26 @@ public:
    */
   void add_column(char type, string *name) {
     assert(type == 'I' || type == 'B' || type == 'F' || type == 'S');
-    types.push(type);
-    columns.push(name);
+    types.push_back(type);
+    columns.push_back(name);
   }
 
   /**
    * Return name of column at idx; nullptr indicates no name given.
    * An idx >= width is undefined.
    */
-  string *col_name(size_t idx) {
+  string *col_name(int idx) {
     assert(idx < width());
-    return columns.get(idx);
+    return columns[idx];
   }
 
   /**
    * Return type of column at idx. An idx >= width is undefined behavior.
    */
-  char col_type(size_t idx) {
+  char col_type(int idx) {
     assert(idx < width());
 
-    return types.get(idx);
+    return types[idx];
   }
 
   /**
@@ -70,7 +70,7 @@ public:
   int col_idx(const char *name) {
     int width = columns.size();
     for (int i = 0; i < width; i++) {
-      string *s = columns.get(i);
+      string *s = columns[i];
       if (s == nullptr ? name == nullptr : s->compare(name) == 0) {
         return i;
       }
@@ -81,16 +81,15 @@ public:
   /**
    * The number of columns
    */
-  size_t width() { return columns.size(); }
-
-  /**
-   * The number of rows
-   */
-  size_t length() { return types.size(); }
+  int width() { return types.size(); }
 
   bool equals(Schema &other) {
-    return columns.equals(other.columns, [](const string *l, const string *r) {
-      return l->compare(*r) == 0;
-    }) && types.equals(other.types);
+    return types.size() == other.types.size() &&
+           equal(types.begin(), types.end(), other.types.begin()) &&
+           columns.size() == other.columns.size() &&
+           equal(columns.begin(), columns.end(), other.columns.begin(),
+                 [](const string *l, const string *r) {
+                   return l->compare(*r) == 0;
+                 });
   }
 };

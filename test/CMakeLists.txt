@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.2)
 
 # specify the C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(Threads REQUIRED)
@@ -38,7 +38,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  EXCLUDE_FROM_ALL
                  )
 
-include_directories(../ ../generated_code)
+include_directories(../src)
 
 add_executable(test.exe test.cpp)
 target_link_libraries(test.exe gtest)

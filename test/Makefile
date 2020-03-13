@@ -21,3 +21,5 @@ build/test.exe: rebuild_cmake
 rebuild_cmake: CMakeLists.txt
 	cd build && cmake ..
 
+rerun: rebuild_cmake
+	cd build && rerun -d ../.. -p "**/*.{cpp,hpp,c,h}" "make && ./test.exe"

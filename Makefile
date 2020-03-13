@@ -1,14 +1,15 @@
 CC=g++
 CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-return-type
-CPATH=generated_code:src
+CPATH=src
 
 SHARED_HEADER_FILES=src/*
+SRC_DIR=src
 BUILD_DIR=build
 
 run: build
 	./example.exe datafile.sor
 
-$(BUILD_DIR)/example.exe: src/example.cpp $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
 build: $(BUILD_DIR)/example.exe

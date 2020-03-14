@@ -18,19 +18,27 @@ multiple queries. The **KV** layer is where data is distributed logically, and
 provides the interface through which the system is queried.  The **Network**
 layer is where requests are made between nodes.
 
+Each node in the network holds parts of dataframes and knows where to look
+to find the parts it does not own (see Implementation for more).
+
 # Implementation
 
 The Application class represents an operation that makes use of a KV to
 manipulate dataframes.  The KV class utilizes the network to manage dataframes.
 Each KV owns a list of dataframes, and knows about the dataframes owned by
-other KVs, through `ownership_mapping`.  
+other KVs, through `ownership_mapping`.  Each KV has potentially several
+chunks of dataframes, stored contiguously in memory via `PartialDataFrame`.
+`DataFrameChunk` is where the data is actually stored.
 
 When `put` is called with a new key, the KV adds itself to the ownership map
 and broadcasts the new map to the other nodes in the network.  The buffer
 passed into `put` is converted into rows chunks at a time.  The chunks are
 distributed over nodes in the network in a round-robin fashion.  That is, nodes
 have a fixed order and chunks are distributed by traversing them as a ring,
-starting at the node where the put request was made.  
+starting at the node where the put request was made.
+
+The `DataFrame` object itself is a virtual dataframe, that is, it delegates
+to the KV in order to perform its operations.
 
 A computation is run on a dataframe by calling `map` on a `Rower`, either on a
 `DataFrame` object, or on a KV by providing the dataframe's key.  The KV runs
@@ -54,4 +62,12 @@ language which compiles into some precompiled computations.  We have considered
 implementing an AST which looks similar to SQL, or using a scripting language,
 possibly Racket, Lua, or NewLISP.
 
+It is unclear how we'd handle adding or removing nodes from the network.  The
+data would have to be redistributed at some point, but this would require
+interrupting computations.
+
+Similarly, our current spec has no redundancy, so if a node were to die, the
+data would be lost.
+
 # Status
+

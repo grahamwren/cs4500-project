@@ -1,18 +1,14 @@
 #pragma once
 
 #include <string>
+#include <variant>
 
 using namespace std;
 
 class Data {
 protected:
   bool missing;
-  union {
-    int i;
-    bool b;
-    float f;
-    string *s;
-  };
+  variant<int, float, bool, string *> data;
 
 public:
   enum Type : uint8_t { MISSING = 0, BOOL = 1, INT = 2, FLOAT = 3, STRING = 4 };
@@ -61,63 +57,42 @@ public:
   }
 
   Data() : missing(true) {}
-  Data(int val) : missing(false), i(val) {}
-  Data(float val) : missing(false), f(val) {}
-  Data(bool val) : missing(false), b(val) {}
-  Data(string *val) : missing(false), s(val) {}
+  Data(int val) : missing(false), data(val) {}
+  Data(float val) : missing(false), data(val) {}
+  Data(bool val) : missing(false), data(val) {}
+  Data(string *val) : missing(false), data(val) {}
   Data(Data &d) = default;
   Data(Data &&d) = default;
   bool is_missing() const { return missing; }
 
   template <typename T> T get() const {
-    if constexpr (is_same_v<T, int>) {
-      if (is_missing())
-        return NULL;
-      else
-        return i;
-    } else if constexpr (is_same_v<T, bool>) {
-      if (is_missing())
-        return NULL;
-      else
-        return b;
-    } else if constexpr (is_same_v<T, float>) {
-      if (is_missing())
-        return NULL;
-      else
-        return f;
-    } else if constexpr (is_same_v<T, string *>) {
-      if (is_missing())
-        return NULL;
-      else
-        return s;
-    } else {
-      assert(false);
-    }
+    assert(!is_missing()); // assert not missing
+    return std::get<T>(data);
   }
 
   void set(int val) {
     missing = false;
-    i = val;
+    data = val;
   }
   void set(float val) {
     missing = false;
-    f = val;
+    data = val;
   }
   void set(bool val) {
     missing = false;
-    b = val;
+    data = val;
   }
   void set(string *val) {
     missing = false;
-    s = val;
+    data = val;
   }
   void set() { missing = true; }
 };
 
 class TypedData {
 public:
-  const Data::Type type;
   const Data data;
+  const Data::Type type;
   TypedData() : data(), type(Data::Type::MISSING) {}
   TypedData(int val) : data(val), type(Data::Type::INT) {}
   TypedData(float val) : data(val), type(Data::Type::FLOAT) {}

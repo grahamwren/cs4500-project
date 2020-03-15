@@ -10,14 +10,13 @@
  */
 class Rower : public Object {
 public:
-  Rower *_other = nullptr;
   /**
    * This method is called once per row. The row object is on loan and
    * should not be retained as it is likely going to be reused in the next
    * call. The return value is used in filters to indicate that a row
    * should be kept.
    */
-  virtual bool accept(Row &r) {}
+  virtual bool accept(const Row &r) = 0;
 
   /**
    * Once traversal of the data frame is complete the rowers that were
@@ -25,10 +24,5 @@ public:
    * original object will be the last to be called join on. The join method
    * is reponsible for cleaning up memory.
    */
-  virtual void join_delete(Rower *other) { _other = other; }
-
-  virtual ~Rower() {
-    if (_other != nullptr)
-      delete _other;
-  }
+  virtual void join_delete(const Rower *other) { delete other; }
 };

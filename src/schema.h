@@ -1,8 +1,6 @@
 #pragma once
 
-// lang::CwC
-
-#include "list.h"
+using namespace std;
 
 /*************************************************************************
  * Schema::
@@ -13,7 +11,7 @@
  */
 class Schema {
   vector<char> types;
-  vector<string *> columns;
+  vector<string *> columns; // column names are external
 
 public:
   Schema() = default;
@@ -21,7 +19,7 @@ public:
   /**
    * Copying constructor
    */
-  Schema(Schema &from) : types(from.types), columns(from.columns) {}
+  Schema(const Schema &from) : types(from.types), columns(from.columns) {}
 
   /**
    * Create a schema from a string of types. A string that contains
@@ -50,7 +48,7 @@ public:
    * Return name of column at idx; nullptr indicates no name given.
    * An idx >= width is undefined.
    */
-  string *col_name(int idx) {
+  const string *col_name(int idx) const {
     assert(idx < width());
     return columns[idx];
   }
@@ -58,7 +56,7 @@ public:
   /**
    * Return type of column at idx. An idx >= width is undefined behavior.
    */
-  char col_type(int idx) {
+  char col_type(int idx) const {
     assert(idx < width());
 
     return types[idx];
@@ -67,13 +65,14 @@ public:
   /**
    * Given a column name return its index, or -1.
    */
-  int col_idx(const char *name) {
+  int col_idx(const string *name) const {
     int width = columns.size();
     for (int i = 0; i < width; i++) {
       string *s = columns[i];
-      if (s == nullptr ? name == nullptr : s->compare(name) == 0) {
+      if (s == nullptr && name == nullptr)
         return i;
-      }
+      else if (name && s && name->compare(*s) == 0)
+        return i;
     }
     return -1;
   }
@@ -81,9 +80,9 @@ public:
   /**
    * The number of columns
    */
-  int width() { return types.size(); }
+  int width() const { return types.size(); }
 
-  bool equals(Schema &other) {
+  bool equals(const Schema &other) const {
     return types.size() == other.types.size() &&
            equal(types.begin(), types.end(), other.types.begin()) &&
            columns.size() == other.columns.size() &&
@@ -91,5 +90,16 @@ public:
                  [](const string *l, const string *r) {
                    return l->compare(*r) == 0;
                  });
+  }
+
+  /**
+   * copies a null-terminated char* representation of this schema into the given
+   * dest buffer, if buffer smaller than width() +1 behavior undefined
+   */
+  void c_str(char *dest) const {
+    for (int i = 0; i < width(); i++) {
+      dest[i] = col_type(i);
+    }
+    dest[width()] = '\0';
   }
 };

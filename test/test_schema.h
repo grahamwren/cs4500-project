@@ -19,10 +19,10 @@ TEST_F(TestSchema, test_add_column_col_name) {
 }
 
 TEST_F(TestSchema, test_col_idx_width) {
-  EXPECT_EQ(scm->col_idx("id"), 0);
+  EXPECT_EQ(scm->col_idx(new string("id")), 0);
   EXPECT_EQ(scm->width(), 2);
   scm->add_column('I', new string("age"));
-  EXPECT_EQ(scm->col_idx("age"), 2);
+  EXPECT_EQ(scm->col_idx(new string("age")), 2);
   EXPECT_EQ(scm->width(), 3);
 }
 

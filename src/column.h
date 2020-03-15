@@ -1,7 +1,6 @@
 #pragma once
 
 #include "data.h"
-#include "list.h"
 #include <variant>
 
 using namespace std;
@@ -22,17 +21,21 @@ public:
   virtual ~Column() {}
 
   template <typename T> TypedColumn<T> &as() const {
-    assert(type == Data::get_type<T>());
-    if constexpr (is_same_v<T, int>)
+    if constexpr (is_same_v<T, int>) {
+      assert(type == Data::Type::INT);
       return *const_cast<TypedColumn<T> *>(as_int());
-    else if constexpr (is_same_v<T, float>)
+    } else if constexpr (is_same_v<T, float>) {
+      assert(type == Data::Type::FLOAT);
       return *const_cast<TypedColumn<T> *>(as_float());
-    else if constexpr (is_same_v<T, bool>)
+    } else if constexpr (is_same_v<T, bool>) {
+      assert(type == Data::Type::BOOL);
       return *const_cast<TypedColumn<T> *>(as_bool());
-    else if constexpr (is_same_v<T, string *>)
+    } else if constexpr (is_same_v<T, string *>) {
+      assert(type == Data::Type::STRING);
       return *const_cast<TypedColumn<T> *>(as_string());
-    else
+    } else {
       assert(false);
+    }
   }
 
   virtual int size() const = 0;

@@ -1,13 +1,13 @@
 #pragma once
 
-// lang::CwC
-
 #include "bytes_reader.h"
 #include "bytes_writer.h"
-#include "fielder.h"
+#include "data.h"
 #include "object.h"
 #include "schema.h"
 #include <stdlib.h>
+
+using namespace std;
 
 /*************************************************************************
  * Row::
@@ -18,164 +18,110 @@
  *
  * authors: @grahamwren, @jagen31
  */
-class Row : public Object {
+class Row {
+  const int _width = 0;
+  const Schema &scm;
+  Data *data;
+  int idx = 0;
+
 public:
-  union Data {
-    bool b;
-    int i;
-    float f;
-    string *s;
-  };
-
-  int _width;
-  int _idx = 0;
-  char *_types;
-  Data *_data = nullptr;
-
   /**
-   * Build a row following a schema.
+   * Build a row following a schema with a start index.
    */
-  Row(Schema &scm) {
-    _width = scm.width();
-    _types = new char[_width];
-    _data = new Data[_width];
-
-    for (size_t i = 0; i < _width; ++i) {
-      _types[i] = scm.col_type(i);
-    }
+  Row(int i, const Schema &scm) : _width(scm.width()), scm(scm), idx(i) {
+    data = new Data[width()];
   }
 
   /**
-   * Build row from members
+   * Build a row following a schema with default start index.
    */
-  Row(int w, int idx, char *types, Data *data)
-      : _width(w), _idx(idx), _types(types), _data(data) {}
+  Row(const Schema &scm) : Row(0, scm) {}
 
   /**
-   * allocate space for empty row
+   * copy constructor
    */
-  Row() : Row(0, 0, nullptr, nullptr) {}
-
-  Row(Row &&o) : Row(o._width, o._idx, o._types, o._data) {
-    o._types = nullptr;
-    o._data = nullptr;
+  Row(const Row &o) : Row(o.idx, o.scm) {
+    memcpy(data, o.data, width() * sizeof(Data));
   }
 
-  ~Row() {
-    delete[] _types;
-    delete[] _data;
-  }
+  ~Row() { delete[] data; }
 
   /**
-   * Setters: set the given column with the given value. Setting a column with
-   * a value of the wrong type is undefined.
+   * Number of fields in the row.
    */
-  void set(size_t col, int val) {
-    assert(col < width());
-    _data[col].i = val;
-  }
-
-  void set(size_t col, float val) {
-    assert(col < width());
-    _data[col].f = val;
-  }
-
-  void set(size_t col, bool val) {
-    assert(col < width());
-    _data[col].b = val;
-  }
-
-  /**
-   * Acquire ownership of the string.
-   */
-  void set(size_t col, string *val) {
-    assert(col < width());
-    _data[col].s = val;
-  }
+  int width() const { return _width; }
 
   /**
    * Set/get the index of this row (ie. its position in the _dataframe. This is
    * only used for informational purposes, unused otherwise
    */
-  void set_idx(size_t idx) { _idx = idx; }
-
-  size_t get_idx() { return _idx; }
+  int get_idx() const { return idx; }
+  void set_idx(int i) { idx = i; }
 
   /**
    * Getters: get the value at the given column. If the column is not
    * of the requested type, the result is undefined.
    */
-  int get_int(size_t col) { return _data[col].i; }
-
-  bool get_bool(size_t col) { return _data[col].b; }
-
-  float get_float(size_t col) { return _data[col].f; }
-
-  string *get_string(size_t col) { return _data[col].s; }
-  /**
-   * Number of fields in the row.
-   */
-  size_t width() { return _width; }
+  template <typename T> T get(int col) const { return data[col].get<T>(); }
+  bool is_missing(int i) const { return data[i].is_missing(); }
 
   /**
-   * Type of the field at the given position. An idx >= width is  undefined.
+   * get schema for this row
    */
-  char col_type(size_t idx) { return _types[idx]; }
+  const Schema &get_schema() const { return scm; }
 
   /**
-   * Given a Fielder, visit every field of this row. The first argument is
-   * index of the row in the _dataframe.
-   * Calling this method before the row's fields have been set is undefined.
+   * Setters: set the given column with the given value. Setting a column with
+   * a value of the wrong type is undefined.
    */
-  void visit(size_t idx, Fielder &f) {
-    f.start(idx);
-    for (size_t i = 0; i < width(); ++i) {
-      char type = _types[i];
-      Data value = _data[i];
-      if (type == 'I') {
-        f.accept(value.i);
-      } else if (type == 'F') {
-        f.accept(value.f);
-      } else if (type == 'B') {
-        f.accept(value.b);
-      } else if (type == 'S') {
-        f.accept(value.s);
-      }
-    }
-    f.done();
+  void set(int col, int val) {
+    assert(col < width());
+    data[col].set(val);
   }
 
-  bool equals(Object *o) {
-    Row *other = dynamic_cast<Row *>(o);
+  void set(int col, float val) {
+    assert(col < width());
+    data[col].set(val);
+  }
 
-    if (other == nullptr) {
+  void set(int col, bool val) {
+    assert(col < width());
+    data[col].set(val);
+  }
+
+  void set(int col, string *val) {
+    assert(col < width());
+    data[col].set(val);
+  }
+
+  bool equals(const Row *other) const {
+    if (other == nullptr || other->width() != width() ||
+        !scm.equals(other->get_schema())) {
       return false;
     }
 
-    if (other->_width != _width) {
-      return false;
-    }
-
-    for (int i = 0; i < _width; ++i) {
-      char type = col_type(i);
-      if (type != other->col_type(i)) {
+    for (int i = 0; i < width(); ++i) {
+      char type = scm.col_type(i);
+      if (is_missing(i) && other->is_missing(i)) {
+        continue;
+      } else if (is_missing(i) || other->is_missing(i)) {
         return false;
-      }
-      if (type == 'B') {
-        if (get_bool(i) != other->get_bool(i)) {
+      } else if (type == 'B') {
+        if (get<bool>(i) != other->get<bool>(i))
           return false;
-        }
       } else if (type == 'I') {
-        if (get_int(i) != other->get_int(i)) {
+        if (get<int>(i) != other->get<int>(i))
           return false;
-        }
       } else if (type == 'F') {
-        if (get_float(i) != other->get_float(i)) {
+        if (get<float>(i) != other->get<float>(i))
           return false;
-        }
-      } else {
-        if (get_string(i)->compare(*other->get_string(i)) != 0) {
-          return false;
+      } else if (type == 'S') {
+        string *s = get<string *>(i);
+        string *other_s = other->get<string *>(i);
+        if (s == nullptr || other_s == nullptr)
+          return s == other_s;
+        else {
+          return s->compare(*other_s) == 0;
         }
       }
     }
@@ -185,24 +131,27 @@ public:
 
   void pack(BytesWriter &writer) {
     writer.pack('R');
+    writer.pack(idx);
     writer.pack((int)width());
-    writer.pack(width(), _types);
+    char types[scm.width() + 1];
+    scm.c_str(types);
+    writer.pack(types);
     for (int i = 0; i < width(); i++) {
-      switch (_types[i]) {
+      switch (types[i]) {
       case 'I': {
-        writer.pack(get_int(i));
+        writer.pack(get<int>(i));
         break;
       }
       case 'B': {
-        writer.pack(get_bool(i));
+        writer.pack(get<bool>(i));
         break;
       }
       case 'F': {
-        writer.pack(get_float(i));
+        writer.pack(get<float>(i));
         break;
       }
       case 'S': {
-        writer.pack(get_string(i));
+        writer.pack(get<string *>(i));
         break;
       }
       default:
@@ -211,69 +160,121 @@ public:
     }
   }
 
-  static Row unpack(BytesReader &reader) {
+  /**
+   * allocates a Row based on the next bytes in the reader
+   */
+  static Row *unpack(const Schema &scm, BytesReader &reader) {
     assert(reader.yield_char() == 'R');
+    int idx = reader.yield_int();
     int width = reader.yield_int();
 
     /* collect types for schema */
-    char *types = new char[width + 1];
+    char types[width + 1];
     reader.yield_c_arr(types);
 
+    /* assert unpacking correct schema */
+    assert(scm.width() == width);
+    for (int i = 0; i < width; i++) {
+      assert(types[i] == scm.col_type(i));
+    }
+
+    Row *row = new Row(idx, scm);
+
     /* collect data based on schema */
-    Data *data = new Data[width];
     for (int i = 0; i < width; ++i) {
-      switch (types[i]) {
+      switch (scm.col_type(i)) {
       case 'B': {
-        data[i].b = reader.yield_bool();
+        row->set(i, reader.yield_bool());
         break;
       }
       case 'I': {
-        data[i].i = reader.yield_int();
+        row->set(i, reader.yield_int());
         break;
       }
       case 'F': {
-        data[i].f = reader.yield_float();
+        row->set(i, reader.yield_float());
         break;
       }
       case 'S': {
         // TODO: Not clear who owns this allocated string
-        data[i].s = reader.yield_string_ptr();
+        row->set(i, reader.yield_string_ptr());
         break;
       }
       default:
         assert(false); // unknown type in row
       }
     }
-
-    Row r(width, 0, types, data);
-    return r; // move
+    return row;
   }
 
-  void debug() {
-    p("Row<").p(this).p(">(types: '");
-    for (int i = 0; i < width(); i++) {
-      p(_types[i]);
-    }
-    p("', data: [");
+  static Row *unpack(BytesReader &reader) {
+    assert(reader.yield_char() == 'R');
+    int idx = reader.yield_int();
+    int width = reader.yield_int();
 
-    for (int i = 0; i < width(); i++) {
-      p("<");
-      switch (col_type(i)) {
-      case 'I':
-        p(get_int(i));
-        break;
-      case 'F':
-        p(get_float(i));
-        break;
-      case 'B':
-        p(get_bool(i));
-        break;
-      case 'S':
-        p("\"").p(get_string(i)->c_str()).p("\"");
+    /* collect types for schema */
+    char types[width + 1];
+    reader.yield_c_arr(types);
+    Schema *scm = new Schema(types);
+    Row *row = new Row(idx, *scm);
+
+    /* collect data based on schema */
+    for (int i = 0; i < width; ++i) {
+      switch (scm->col_type(i)) {
+      case 'B': {
+        row->set(i, reader.yield_bool());
         break;
       }
-      p(">");
+      case 'I': {
+        row->set(i, reader.yield_int());
+        break;
+      }
+      case 'F': {
+        row->set(i, reader.yield_float());
+        break;
+      }
+      case 'S': {
+        // TODO: Not clear who owns this allocated string
+        row->set(i, reader.yield_string_ptr());
+        break;
+      }
+      default:
+        assert(false); // unknown type in row
+      }
     }
-    pln("])");
+    return row;
+  }
+
+  void print(bool with_meta = true) {
+    if (with_meta) {
+      cout << "Row<" << this << ">(scm: '";
+      for (int i = 0; i < width(); i++) {
+        cout << scm.col_type(i);
+      }
+      cout << "', data: [";
+    }
+
+    for (int i = 0; i < width(); i++) {
+      cout << '<';
+      switch (scm.col_type(i)) {
+      case 'I':
+        cout << get<int>(i);
+        break;
+      case 'F':
+        cout << get<float>(i);
+        break;
+      case 'B':
+        cout << get<bool>(i);
+        break;
+      case 'S':
+        cout << '"' << get<string *>(i)->c_str() << '"';
+        break;
+      }
+      cout << '>';
+    }
+    if (with_meta) {
+      cout << "])";
+    }
+    cout << endl;
   }
 };

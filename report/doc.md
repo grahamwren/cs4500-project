@@ -80,6 +80,7 @@ SumRower r;
 kv.map(*r);
 
 > r.result
+21
 ```
 
 # Open questions

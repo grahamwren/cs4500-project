@@ -23,6 +23,8 @@ to find the parts it does not own (see Implementation for more).
 
 # Implementation
 
+![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-project/raw/master/report/diagram.png)
+
 The Application class represents an operation that makes use of a KV to
 manipulate dataframes.  The KV class utilizes the network to manage dataframes.
 Each KV owns a list of dataframes, and knows about the dataframes owned by
@@ -52,7 +54,33 @@ serialization/deserialization method for them.  This is because the Rowers must
 be sent over the network, and arbitrary C++ code cannot be serialized in our
 system.
 
+A `Node` is the low-level interface to the networking layer.  The node will
+handle network commands automatically, and takes a callback for handling
+application commands.  The callback, set through `set_data_handler`, will
+close over a KV, and deserialize and interpret the message data using
+the KV.
+
 # Use cases
+
+```
+input_file.sor:
+
+<1><2><3>
+<4><5><6>
+```
+
+```cpp
+Node node(... ip addr ...);
+KV kv(node);
+node.set_data_handler(... data handler ...);
+
+BytesReader b = Sorer::parse("input_file.sor");
+kv.put("example", b);
+SumRower r;
+kv.map(*r);
+
+> r.result
+```
 
 # Open questions
 
@@ -71,3 +99,8 @@ data would be lost.
 
 # Status
 
+The networking layer is mostly done, aside from the callback with the
+interpreter.  The existing codebase has been migrated to C++.  The
+implementation for `DataFrame` has to be moved to `DataFrameChunk`, and the
+`DataFrame` itself reimplemented to perform its operations using a `KV`.
+Speaking of, the `KV` itself needs to be implemented.

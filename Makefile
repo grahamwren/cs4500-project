@@ -16,6 +16,10 @@ BUILD_DIR=build
 run: build
 	$(BUILD_DIR)/example.exe datafile.sor
 
+build: $(BUILD_DIR)/example.exe
+
+valgrind: docker_valgrind
+
 $(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
@@ -26,7 +30,6 @@ $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) -c $< -o $@
 
 
-build: $(BUILD_DIR)/example.exe
 
 bench: $(BUILD_DIR)/bench.exe
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_0.sor

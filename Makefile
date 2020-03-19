@@ -1,10 +1,12 @@
 DEBUG=true
 CC=g++
+FAST_CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare 
+DEBUG_CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall
 
 ifeq ($(DEBUG),true)
-	CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall
+	CCOPTS=$(DEBUG_CCOPTS)
 else
-	CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare 
+	CCOPTS=$(FAST_CCOPTS)
 endif
 
 CPATH=src
@@ -30,8 +32,8 @@ $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) -c $< -o $@
 
 
-
-bench: $(BUILD_DIR)/bench.exe
+bench: CCOPTS=$(FAST_CCOPTS)
+bench: clean $(BUILD_DIR)/bench.exe
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_0.sor
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_1.sor
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_2.sor

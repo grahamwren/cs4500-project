@@ -83,13 +83,6 @@ int main(int argc, char **argv) {
         }
         return true;
       }
-
-      void join_delete(Rower *o) {
-        SumIntRower *other = dynamic_cast<SumIntRower *>(o);
-        assert(other);
-        sum += other->sum;
-        delete o;
-      }
     };
     SumIntRower rower;
     df.map(rower);

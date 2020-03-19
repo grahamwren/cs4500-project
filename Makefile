@@ -2,9 +2,9 @@ DEBUG=true
 CC=g++
 
 ifeq ($(DEBUG),true)
-	CCOPTS=-Ofast --std=c++17 -Wno-varargs
+	CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wall
 else
-	CCOPTS==-O0 -g --std=c++17 -Wno-varargs -W@all
+	CCOPTS=-Ofast --std=c++17 -Wno-varargs
 endif
 
 CPATH=src
@@ -19,11 +19,26 @@ run: build
 $(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
+$(BUILD_DIR)/bench.exe: $(SRC_DIR)/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
 $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) -c $< -o $@
 
 
 build: $(BUILD_DIR)/example.exe
+
+bench: $(BUILD_DIR)/bench.exe
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_0.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_1.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_2.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_3.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_4.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_5.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_6.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_7.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_8.sor
+	./$(BUILD_DIR)/bench.exe bench_files/big_file_9.sor
 
 native_valgrind: example.exe
 	vagrind --leak-check=yes ./example.exe datafile.sor

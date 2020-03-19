@@ -36,10 +36,10 @@
 massif.out.*
 
 # Generated code
-**/generated_code/*
 **/build/*
-!**/generated_code/.keep
 !**/build/.keep
+
+bench_files
 
 # direnv
 .envrc

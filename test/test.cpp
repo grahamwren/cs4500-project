@@ -3,6 +3,7 @@
 #include "test_column.h"
 #include "test_data.h"
 #include "test_dataframe.h"
+#include "test_network.h"
 #include "test_parser.h"
 #include "test_row.h"
 #include "test_schema.h"

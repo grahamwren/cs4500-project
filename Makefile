@@ -22,6 +22,9 @@ build: $(BUILD_DIR)/example.exe
 
 valgrind: docker_valgrind
 
+test: FORCE
+	cd test && make
+
 $(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
@@ -63,3 +66,5 @@ docker_valgrind: docker_install
 
 docker_install: Dockerfile
 	docker build -t $(CONT_NAME) .
+
+FORCE:

@@ -6,6 +6,7 @@
 #include "rower.h"
 #include "schema.h"
 #include "thread.h"
+#include <cassert>
 #include <cmath>
 #include <thread>
 

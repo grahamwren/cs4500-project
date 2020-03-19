@@ -4,6 +4,8 @@
 #include "bytes_writer.h"
 #include "data.h"
 #include "schema.h"
+#include <cassert>
+#include <cstring>
 #include <inttypes.h>
 #include <stdlib.h>
 

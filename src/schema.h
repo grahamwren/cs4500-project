@@ -2,6 +2,8 @@
 
 #include "data.h"
 #include "parser.h"
+#include <cassert>
+#include <cstring>
 #include <iostream>
 #include <vector>
 

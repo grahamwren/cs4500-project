@@ -2,9 +2,9 @@ DEBUG=true
 CC=g++
 
 ifeq ($(DEBUG),true)
-	CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wall
+	CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall
 else
-	CCOPTS=-Ofast --std=c++17 -Wno-varargs
+	CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare 
 endif
 
 CPATH=src
@@ -40,8 +40,8 @@ bench: $(BUILD_DIR)/bench.exe
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_8.sor
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_9.sor
 
-native_valgrind: example.exe
-	vagrind --leak-check=yes ./example.exe datafile.sor
+native_valgrind: $(BUILD_DIR)/example.exe
+	valgrind --leak-check=yes $(BUILD_DIR)/example.exe datafile.sor
 
 clean:
 	rm -rf build/[!.]*
@@ -52,6 +52,9 @@ define docker_run
 	docker run -ti -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
-docker_vagrind:
+docker_valgrind: docker_install
 	$(call docker_run, make clean build)
 	$(call docker_run, make native_valgrind)
+
+docker_install: Dockerfile
+	docker build -t $(CONT_NAME) .

@@ -2,6 +2,8 @@
 
 #include "bytes_reader.h"
 #include "data.h"
+#include <cassert>
+#include <cstring>
 #include <inttypes.h>
 #include <iostream>
 

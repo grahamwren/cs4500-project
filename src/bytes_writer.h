@@ -1,6 +1,6 @@
 #pragma once
 
-// lang::CwC
+#include <cstring>
 
 /**
  * a class which encapsulates a dynamically growing bytes buffer and manages the

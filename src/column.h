@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data.h"
+#include <cassert>
 #include <iostream>
 #include <variant>
 #include <vector>

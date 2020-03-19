@@ -4,18 +4,18 @@ Done by [@grahamwren](https://github.com/grahamwren) and
 [@jagen31](https://github.com/jagen31).
 
 EAU2 is a system for distributing data over a network and running computations
-in parallel over that data.  EAU2 uses a distributed key value store to manage
-multiple dataframes which may be larger than memory and commmunication over
-TCP/IP to orchestrate parallel computations over those dataframes.  Dataframes
+in parallel over that data. EAU2 uses a distributed key value store to manage
+multiple dataframes which may be larger than memory and communication over
+TCP/IP to orchestrate parallel computations over those dataframes. Dataframes
 in EAU2 are read-only, making it easy to run applications in parallel over the
 same set of data.
 
 # Architecture
 
-EAU2 has three layers.  The **Application** layer is where programs are written
-that make use of EAU2.  Programs can construct multiple dataframes and make
+EAU2 has three layers. The **Application** layer is where programs are written
+that make use of EAU2. Programs can construct multiple dataframes and make
 multiple queries. The **KV** layer is where data is distributed logically, and
-provides the interface through which the system is queried.  The **Network**
+provides the interface through which the system is queried. The **Network**
 layer is where requests are made between nodes.
 
 Each node in the network holds parts of dataframes and knows where to look
@@ -26,41 +26,41 @@ to find the parts it does not own (see Implementation for more).
 ![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-project/raw/master/report/diagram.png)
 
 The Application class represents an operation that makes use of a KV to
-manipulate dataframes.  The KV class utilizes the network to manage dataframes.
+manipulate dataframes. The KV class utilizes the network to manage dataframes.
 Each KV owns a list of dataframes, and knows about the dataframes owned by
-other KVs, through `ownership_mapping`.  Each KV has potentially several
+other KVs, through `ownership_mapping`. Each KV has potentially several
 chunks of dataframes, stored contiguously in memory via `PartialDataFrame`.
 `DataFrameChunk` is where the data is actually stored.
 
 When `put` is called with a new key, the KV adds itself to the ownership map
-and broadcasts the new map to the other nodes in the network.  The buffer
-passed into `put` is converted into rows chunks at a time.  The chunks are
-distributed over nodes in the network in a round-robin fashion.  That is, nodes
+and broadcasts the new map to the other nodes in the network. The buffer
+passed into `put` is converted into rows one chunk at a time. The chunks are
+distributed over nodes in the network in a round-robin fashion. That is, nodes
 have a fixed order and chunks are distributed by traversing them as a ring,
 starting at the node where the put request was made.
 
 The `DataFrame` object itself is a virtual dataframe, that is, it delegates
 to the KV in order to perform its operations.
 
-A computation is run on a dataframe by calling `map` on a `Rower`, either on a
-`DataFrame` object, or on a KV by providing the dataframe's key.  The KV runs
+A computation is run on a dataframe by calling `map` with a `Rower`, either on a
+`DataFrame` object, or on a KV by providing the dataframe's key. The KV runs
 the computation on the chunks contained in the current node, while using the
 network to ask for the results of the computation run on chunks stored in other
-nodes.  The computation runs in parallel, so rows are likely processed out of
-order.  The results, however, are joined in order.
+nodes. The computation runs in parallel, so rows are likely processed out of
+order. The results, however, are joined in order.
 
 A fixed set of `Rower`s have to be defined at compile time, along with a
-serialization/deserialization method for them.  This is because the Rowers must
+serialization/deserialization method for them. This is because the Rowers must
 be sent over the network, and arbitrary C++ code cannot be serialized in our
 system.
 
-A `Node` is the low-level interface to the networking layer.  The node will
+A `Node` is the low-level interface to the networking layer. The node will
 handle network commands automatically, and takes a callback for handling
-application commands.  The callback, set through `set_data_handler`, will
-close over a KV, and deserialize and interpret the message data using
-the KV.
+application commands. The callback, set through `set_data_handler` by the KV, will be used by the KV to asynchronously handle Application level requests made of this Node by other Nodes in the cluster.
 
 # Use cases
+
+## Sum Numbers in DataFrame
 
 ```
 input_file.sor:
@@ -70,28 +70,233 @@ input_file.sor:
 ```
 
 ```cpp
-Node node(... ip addr ...);
+Node node(... ip addr of existing node in cluster ...);
 KV kv(node);
-node.set_data_handler(... data handler ...);
 
-BytesReader b = Sorer::parse("input_file.sor");
-kv.put("example", b);
+Schema* scm = Parser::infer_file_schema("input_file.sor");
+DataFrame *df = kv.create("example", *scm);
+Parser::load_file(*df, "input_file.sor");
+
 SumRower r;
-kv.map(*r);
+kv.map("example", *r);
 
 > r.result
 21
 ```
 
+## WordCount
+
+First chapter of Moby Dick or The Whale. Obtained from [archive.org](https://archive.org/stream/mobydickorwhale01melvuoft/mobydickorwhale01melvuoft_djvu.txt).
+
+<details><summary>loomings.sor</summary>
+
+```sor
+<"call"><"me"><"ishmael"><"some"><"years"><"ago"><"never"><"mind"><"how"><"long"><"precisely"><"having"><"little"><"or">
+<"no"><"money"><"in"><"my"><"purse"><"and"><"nothing"><"particular"><"to"><"interest"><"me"><"on"><"shore"><"i"><"thought"><"i">
+<"would"><"sail"><"about"><"a"><"little"><"and"><"see"><"the"><"watery"><"part"><"of"><"the"><"world"><"it"><"is"><"a"><"way"><"i">
+<"have"><"of"><"driving"><"off"><"the"><"spleen"><"and"><"regulating"><"the"><"circulation"><"whenever"><"i"><"find">
+<"myself"><"growing"><"grim"><"about"><"the"><"mouth"><"whenever"><"it"><"is"><"a"><"damp"><"drizzly"><"november"><"in">
+<"my"><"soul"><"whenever"><"i"><"find"><"myself"><"involuntarily"><"pausing"><"before"><"coffin"><"warehouses">
+<"and"><"bringing"><"up"><"the"><"rear"><"of"><"every"><"funeral"><"i"><"meet"><"and"><"especially"><"whenever"><"my">
+<"hypos"><"get"><"such"><"an"><"upper"><"hand"><"of"><"me"><"that"><"it"><"requires"><"a"><"strong"><"moral"><"principle"><"to">
+<"prevent"><"me"><"from"><"deliberately"><"stepping"><"into"><"the"><"street"><"and"><"methodically"><"knocking">
+<"people's"><"hats"><"off"><"then"><"i"><"account"><"it"><"high"><"time"><"to"><"get"><"to"><"sea"><"as"><"soon"><"as"><"i"><"can">
+<"this"><"is"><"my"><"substitute"><"for"><"pistol"><"and"><"ball"><"with"><"a"><"philosophical"><"flourish"><"cato">
+<"throws"><"himself"><"upon"><"his"><"sword"><"i"><"quietly"><"take"><"to"><"the"><"ship"><"there"><"is"><"nothing">
+<"surprising"><"in"><"this"><"if"><"they"><"but"><"knew"><"it"><"almost"><"all"><"men"><"in"><"their"><"degree"><"some"><"time">
+<"or"><"other"><"cherish"><"very"><"nearly"><"the"><"same"><"feelings"><"toward"><"the"><"ocean"><"with"><"me"><"there">
+<"now"><"is"><"your"><"insular"><"city"><"of"><"the"><"manhattoes"><"belted"><"round"><"by"><"wharves"><"as"><"indian">
+<"isles"><"by"><"coral"><"reefs"><"commerce"><"surrounds"><"it"><"with"><"her"><"surf"><""><"right"><"and"><"left"><"the">
+<"streets"><"take"><"you"><"waterward"><"its"><"extreme"><"down"><"-town"><"is"><"the"><"battery"><"where"><"that">
+<"noble"><"mole"><"is"><"washed"><"by"><"waves"><"and"><"cooled"><"by"><"breezes"><"which"><"a"><"few"><"hours"><"previous">
+<"were"><"out"><"of"><"sight"><"of"><"land"><"look"><"at"><"the"><"crowds"><"of"><"water"><"-gazers"><"there">
+<"circumambulate"><"the"><"city"><"of"><"a"><"dreamy"><"sabbath"><"afternoon"><"go"><"from"><"corlears"><"hook"><"to">
+<"coenties"><"slip"><"and"><"from"><"thence"><"by"><"whitehall"><"northward"><"what"><"do"><"you"><"see"><"posted">
+<"like"><"silent"><"sentinels"><"all"><"around"><"the"><"town"><"stand"><"thousands"><"upon"><"thousands"><"of">
+<"mortal"><"men"><"fixed"><"in"><"ocean"><"reveries"><"some"><"leaning"><"against"><"the"><"spilessome"><"seated">
+<"upon"><"the"><"pier-heads"><"some"><"looking"><"over"><"vhe"><"bulwarks"><"of"><"ships"><"from"><"china"><"some">
+<"high"><"aloft"><"in"><"the"><"rigging"><"as"><"if"><"striving"><"to"><"get"><"a"><"still"><"better"><"seaward"><"peep"><"but">
+<"these"><"are"><"all"><"landsmen"><"of"><"week"><"days"><"pent"><"up"><"in"><"lath"><"and"><"plaster"><"tied"><"to">
+<"counters"><"nailed"><"to"><"benches"><"clinched"><"to"><"desks"><"how"><"then"><"is"><"this"><"are"><"the"><"green">
+<"fields"><"gone"><"what"><"do"><"they"><"herebut"><"look"><"here"><"come"><"more"><"crowds"><"pacing"><"straight"><"for">
+<"the"><"water"><"and"><"seemingly"><"bound"><"for"><"a"><"dive"><"strangenothing"><"will"><"content"><"them"><"but">
+<"the"><"extremest"><"limit"><"of"><"the"><"land"><"loitering"><"under"><"the"><"shady"><"lee"><"of"><"yonder">
+<"warehouses"><"will"><"not"><"suffice"><"no"><"they"><"must"><"get"><"just"><"as"><"nigh"><"the"><"water"><"as"><"they">
+<"possibly"><"can"><"without"><"falling"><"in"><"and"><"there"><"they"><"stand"><"miles"><"of"><"them"><"leagues">
+<"inlanders"><"all"><"they"><"come"><"from"><"lanes"><"and"><"alleys"><"streets"><"and"><"avenues"><"north"><"east">
+<"south"><"and"><"west"><"yet"><"here"><"they"><"all"><"unite"><"tell"><"me"><"does"><"the"><"magnetic"><"virtue"><"of"><"the">
+<"needles"><"of"><"the"><"compasses"><"of"><"all"><"those"><"ships"><"attract"><"them"><"thitheronce"><"more"><"say">
+<"you"><"are"><"in"><"the"><"country"><"in"><"some"><"high"><"land"><"of"><"lakes"><""><"take"><"almost"><"any"><"path"><"you">
+<"please"><"and"><"ten"><"to"><"one"><"it"><"carries"><"you"><"down"><"in"><"a"><"dale"><"and"><"leaves"><"you"><"there"><"by"><"a">
+<"pool"><"in"><"the"><"stream"><"there"><"is"><"magic"><"in"><"it"><"let"><"the"><"most"><"absent-minded"><"of"><"men"><"be">
+<"plunged"><"in"><"his"><"deepest"><"reveries"><"stand"><"that"><"man"><"on"><"his"><"legs"><"set"><"his"><"feet"><"a-going">
+<"and"><"he"><"will"><"infallibly"><"lead"><"you"><"to"><"water"><"if"><"water"><"there"><"be"><"in"><"all"><"that"><"region">
+<"should"><"you"><"ever"><"be"><"athirst"><"in"><"the"><"great"><"american"><"desert"><"try"><"this"><"experiment"><"if">
+<"your"><"caravan"><"happen"><"to"><"be"><"supplied"><"with"><"a"><"metaphysical"><"professor"><"yes"><"as">
+<"everyone"><"knows"><"meditation"><"andli"><"water"><"are"><"wedded"><"forever"><"but"><"here"><"is"><"an"><"artist">
+<"he"><"desires"><"to"><"paint"><"you"><"the"><"dreamiest"><"shadiest"><"quietest"><"most"><"enchanting"><"bit"><"of">
+<"romantic"><"landscape"><"in"><"all"><"the"><"valley"><"of"><"the"><"saco"><"what"><"is"><"the"><"chief"><"element"><"he">
+<"employs"><"there"><"stand"><"his"><"trees"><"each"><"with"><"a"><"hollow"><"trunk"><"as"><"if"><"a"><"hermit"><"and"><"a">
+<"crucifix"><"were"><"within"><"and"><"here"><"sleeps"><"his"><"meadow"><"and"><"there"><"sleep"><"his"><"cattle"><"and">
+<"up"><"from"><"yonder"><"cottage"><"goes"><"a"><"sleepy"><"smoke"><"deep"><"into"><"distant"><"woodlands"><"winds"><"a">
+<"mazy"><"way"><"reaching"><"to"><"overlapping"><"spurs"><"of"><"mountains"><"bathed"><"in"><"their"><"hillside">
+<"blue"><"but"><"though"><"the"><"picture"><"lies"><"thus"><"tranced"><"and"><"though"><"this"><"pine-tree"><"shakes">
+<"down"><"its"><"sighs"><"like"><"leaves"><"upon"><"this"><"shepherd's"><"head"><"yet"><"all"><"were"><"vain"><"unless">
+<"the"><"shepherd's"><"eye"><"were"><"fixed"><"upon"><"the"><"magic"><"stream"><"before"><"him"><"go"><"visit"><"the">
+<"prairies"><"in"><"june"><"when"><"for"><"scores"><"on"><"scores"><"of"><"miles"><"you"><"wade"><"knee"><"-deep"><"among">
+<"tiger-lilies"><"what"><"is"><"the"><"one"><"charm"><"wanting"><"?water"><"there"><"is"><"not"><"a"><"drop"><"of"><"water">
+<"there"><"were"><"niagara"><"but"><"a"><"cataract"><"of"><"sand"><"would"><"you"><"travel"><"your"><"thousand"><"miles">
+<"to"><"see"><"it"><"why"><"did"><"the"><"poor"><"poet"><"of"><"tennessee"><"upon"><"suddenly"><"receiving"><"two">
+<"handfuls"><"of"><"silver"><"deliberate"><"whether"><"to"><"buy"><"him"><"a"><"coat"><"which"><"he"><"sadly"><"needed">
+<"or"><"invest"><"his"><"money"><"in"><"a"><"pedestrian"><"trip"><"to"><"rockaway"><"beachwhy"><"is"><"almost"><"every">
+<"robust"><"healthy"><"boy"><"with"><"a"><"robust"><"healthy"><"soul"><"in"><"him"><"at"><"some"><"time"><"or"><"other">
+<"crazy"><"to"><"go"><"to"><"sea"><"why"><"upon"><"your"><"first"><"voyage"><"as"><"a"><"passenger"><"did"><"you"><"yourself">
+<"feel"><"such"><"a"><"mystical"><"vibration"><"when"><"firsttold"><"that"><"you"><"and"><"your"><"ship"><"were"><"now">
+<"out"><"of"><"sight"><"ofland"><"why"><"did"><"the"><"old"><"persians"><"hold"><"the"><"sea"><"holywhy"><"did"><"the">
+<"greeks"><"give"><"it"><"a"><"separate"><"deity"><"and"><"own"><"brother"><"of"><"jove"><"surely"><"all"><"this"><"is"><"not">
+<"without"><"meaning"><""><"and"><"still"><"deeper"><"the"><"meaning"><"of"><"that"><"story"><"of"><"narcissus"><"who">
+<"because"><"he"><"could"><"not"><"grasp"><"the"><"tormenting"><"mild"><"image"><"he"><"saw"><"in"><"the"><"fountain">
+<"plunged"><"into"><"it"><"and"><"was"><"drowned"><"but"><"that"><"same"><"image"><"we"><"ourselves"><"see"><"in"><"all">
+<"rivers"><"and"><"oceans"><"it"><"is"><"the"><"image"><"of"><"the"><"ungraspable"><"phantom"><"of"><"life"><"and"><"this">
+<"is"><"the"><"key"><"to"><"it"><"all"><"now"><"when"><"i"><"say"><"that"><"i"><"am"><"in"><"the"><"habit"><"of"><"going"><"to"><"sea">
+<"whenever"><"i"><"begin"><"to"><"grow"><"hazy"><"about"><"the"><"eyes"><"and"><"begin"><"to"><"be"><"over"><"conscious"><"of">
+<"my"><"lungs"><"i"><"do"><"not"><"mean"><"to"><"have"><"it"><"inferred"><"that"><"i"><"ever"><"go"><"to"><"sea"><"as"><"a"><"passenger">
+<"for"><"to"><"go"><"as"><"a"><"passenger"><"you"><"must"><"needs"><"have"><"a"><"purse"><"and"><"a"><"purse"><"is"><"but"><"a"><"rag">
+<"unless"><"you"><"have"><"something"><"in"><"it"><"besides"><"passengers"><"get"><"sea-sick"><"grow">
+<"quarrelsome"><"don't"><"sleep"><"of"><"nights"><"do"><"not"><"enjoy"><"themselves"><"much"><"as"><"a"><"general">
+<"thing"><"no"><"i"><"never"><"go"><"as"><"a"><"passenger"><"nor"><"though"><"i"><"am"><"something"><"of"><"a"><"salt"><"do"><"i">
+<"ever"><"go"><"to"><"sea"><"as"><"a"><"commodore"><"or"><"a"><"captain"><"or"><"a"><"cook"><"i"><"abandon"><"the"><"glory"><"and">
+<"distinction"><"of"><"such"><"offices"><"to"><"those"><"who"><"like"><"them"><"for"><"my"><"part"><"i"><"abominate"><"all">
+<"honourable"><"respectable"><"toils"><"trials"><"and"><"tribulations"><"of"><"every"><"kind"><"whatsoever">
+<"it"><"is"><"quite"><"as"><"much"><"as"><"i"><"can"><"do"><"to"><"take"><"care"><"of"><"myself"><"without"><"taking"><"care"><"of">
+<"ships"><"barques"><"brigs"><"schooners"><"and"><"what"><"not"><"and"><"as"><"for"><"going"><"as"><"cook"><"though"><"i">
+<"confess"><"there"><"is"><"considerable"><"glory"><"in"><"that"><"a"><"cook"><"being"><"a"><"sort"><"of"><"officer"><"on">
+<"shipboard"><"yet"><"somehow"><"i"><"never"><"fancied"><"broiling"><"fowls"><"though"><"once"><"broiled">
+<"judiciously"><"buttered"><"and"><"judgmatically"><"salted"><"and"><"peppered"><"there"><"is"><"no"><"one"><"who">
+<"will"><"speak"><"more"><"respectfully"><"not"><"to"><"say"><"reverentially"><"of"><"a"><"broiled"><"fowl"><"than"><"i">
+<"will"><"it"><"is"><"out"><"of"><"the"><"idolatrous"><"do"><"tings"><"of"><"the"><"old"><"egyptians"><"upon"><"broiled">
+<"ibis"><"and"><"roasted"><"river"><"horse"><"that"><"you"><"see"><"the"><"mummies"><"of"><"those"><"creatures"><"in">
+<"their"><"huge"><"bake-houses"><"the"><"pyramids"><"no"><"when"><"i"><"go"><"to"><"sea"><"i"><"go"><"as"><"a"><"simple"><"sailor">
+<"right"><"before"><"the"><"mast"><"plumb"><"down"><"into"><"the"><"forecastle"><"aloft"><"there"><"to"><"the"><"royal">
+<"mast-head"><"true"><"they"><"rather"><"order"><"me"><"about"><"some"><"and"><"make"><"me"><"jump"><"from"><"spar"><"to">
+<"spar"><"like"><"a"><"grasshopper"><"in"><"a"><"may"><"meadow"><"and"><"at"><"first"><"this"><"sort"><"of"><"thing"><"is">
+<"unpleasant"><"enough"><"it"><"touches"><"one's"><"sense"><"of"><"honour"><"particularly"><"if"><"you"><"come"><"of">
+<"an"><"old"><"established"><"family"><"in"><"the"><"land"><"the"><"van"><"rensselaers"><"or"><"randolphs"><"or">
+<"hardicanutes"><"and"><"more"><"than"><"all"><"if"><"just"><"previous"><"to"><"putting"><"your"><"hand"><"into"><"the">
+<"tar-pot"><"you"><"have"><"been"><"lording"><"it"><"as"><"a"><"country"><"schoolmaster"><"making"><"the"><"tallest">
+<"boys"><"stand"><"in"><"awe"><"of"><"you"><"the"><"transition"><"is"><"a"><"keen"><"one"><"i"><"assure"><"you"><"from"><"a">
+<"schoolmaster"><"to"><"a"><"sailor"><"and"><"requires"><"a"><"strong"><"decoction"><"of"><"seneca"><"and"><"the">
+<"stoics"><"to"><"enable"><"you"><"to"><"grin"><"and"><"bear"><"it"><"but"><"even"><"this"><"wears"><"off"><"hi"><"time"><"what">
+<"of"><"it"><"if"><"some"><"old"><"hunks"><"of"><"a"><"sea-captain"><"orders"><"me"><"to"><"get"><"a"><"broom"><"and"><"sweep">
+<"down"><"the"><"decks"><"what"><"does"><"that"><"indignity"><"amount"><"to"><"weighed"><"i"><"mean"><"in"><"the"><"scales">
+<"of"><"the"><"new"><"testament"><"do"><"you"><"think"><"the"><"archangel"><"gabriel"><"thinks"><"anything"><"the">
+<"less"><"of"><"me"><"because"><"i"><"promptly"><"and"><"respectfully"><"obey"><"that"><"old"><"hunks"><"in"><"that">
+<"particular"><"instance"><"who"><"ain/t"><"a"><"slave"><"tell"><"me"><"that"><"well"><"then"><"however">
+<"the~old^sea"><"-captains"><"may"><"order"><"me"><"about"><"however"><"they"><"may"><"thump"><"and"><"punch"><"me">
+<"about"><"i"><"have"><"the"><"satisfaction"><"of"><"knowing"><"that"><"it"><"is"><"all"><"rightthat"><"everybody">
+<"else"><"is"><"one"><"way"><"or"><"other"><"served"><"in"><"much"><"the"><"same"><"way"><"either"><"in"><"a"><"physical"><"or">
+<"metaphysical"><"point"><"of"><"view"><"that"><"is"><"and"><"so"><"the"><"universal"><"thump"><"is"><"passed"><"round">
+<"and"><"all"><"hands"><"should"><"rub"><"each"><"other's"><"shoulderblades"><"and"><"be"><"content"><"again"><"i">
+<"always"><"go"><"to"><"sea"><"as"><"a"><"sailor"><"because"><"they"><"make"><"a"><"point"><"of"><"paying"><"me"><"for"><"my">
+<"trouble"><"whereas"><"they"><"never"><"pay"><"passengers"><"a"><"single"><"penny"><"that"><"i"><"ever"><"heard"><"of">
+<"on"><"the"><"contrary"><"passengers"><"themselves"><"must"><"pay"><"and"><"there"><"is"><"all"><"the"><"difference">
+<"in"><"the"><"world"><"between"><"paying"><"and"><"being"><"paid"><"the"><"act"><"of"><"paying"><"is"><"perhaps"><"the">
+<"most"><"uncomfortable"><"infliction"><"that"><"the"><"two"><"orchard"><"thieves"><"entailed"><"upon"><"us"><"but">
+<"being"><"paid"><"what"><"will"><"compare"><"with"><"it"><"the"><"urbane"><"activity"><"with"><"which"><"a"><"man">
+<"receives"><"money"><"is"><"really"><"marvellous"><"considering"><"that"><"we"><"so"><"earnestly"><"believe">
+<"money"><"to"><"be"><"the"><"root"><"of"><"all"><"earthly"><"ills"><"and"><"that"><"on"><"no"><"account"><"can"><"a"><"monied">
+<"man"><"enter"><"heaven"><"ah"><"how"><"cheerfully"><"we"><"consign"><"ourselves"><"to"><"perditionfinally"><"i">
+<"always"><"go"><"to"><"sea"><"as"><"a"><"sailor"><"because"><"of"><"the"><"wholesome"><"exercise"><"and"><"pure"><"air"><"of">
+<"the"><"forecastle"><"deck"><"for"><"as"><"in"><"this"><"world"><"head-winds"><"are"><"far"><"more"><"prevalent"><"than">
+<"winds"><"from"><"astern"><"(that"><"is"><"if"><"you"><"never"><"violate"><"the"><"pythagorean"><"maxim),"><"so"><"for">
+<"the"><"most"><"part"><"the"><"commodore"><"on"><"the"><"quarter-deck"><"gets"><"his"><"atmosphere"><"at"><"second">
+<"hand"><"from"><"the"><"sailors"><"on"><"the"><"forecastle"><"he"><"thinks"><"he"><"breathes"><"it"><"first"><"but"><"not">
+<"so"><"in"><"much"><"the"><"same"><"way"><"do"><"the"><"commonalty"><"lead"><"their"><"leaders"><"in"><"many"><"other">
+<"things"><"at"><"the"><"same"><"time"><"that"><"the"><"leaders"><"little"><"suspect"><"it"><"but"><"wherefore"><"it"><"was">
+<"that"><"after"><"having"><"repeatedly"><"smelt"><"the"><"sea"><"as"><"a"><"merchant"><"sailor"><"i"><"should"><"now">
+<"take"><"it"><"into"><"my"><"head"><"to"><"go"><"on"><"a"><"whaling"><"voyage"><"this"><"the"><"invisible">
+<"police-officer"><"of"><"the"><"fates"><"who"><"has"><"the"><"constant"><"surveillance"><"of"><"me"><"and">
+<"secretly"><"dogs"><"me"><"and"><"influences"><"me"><"in"><"some"><"unaccountable"><"way"><"he"><"can"><"better">
+<"answer"><"than"><"any"><"one"><"else"><"and"><"doubtless"><"my"><"going"><"on"><"this"><"whaling"><"voyage"><"formed">
+<"part"><"of"><"the"><"grand"><"programme"><"of"><"providence"><"that"><"was"><"drawn"><"up"><"a"><"long"><"time"><"ago"><"it">
+<"came"><"in"><"as"><"a"><"sort"><"of"><"brief"><"interlude"><"and"><"solo"><"between"><"more"><"extensive">
+<"performances"><"i"><"take"><"it"><"that"><"this"><"part"><"of"><"the"><"bill"><"must"><"have"><"run"><"something"><"like">
+<"thispart"><"of"><"a"><"whaling"><"voyage"><"when"><"others"><"were"><"set"><"down"><"for"><"magnificent"><"parts"><"in">
+<"high"><"tragedies"><"and"><"short"><"and"><"easy"><"parts"><"in"><"genteel"><"comedies"><"and"><"jolly"><"parts"><"in">
+<"farces"><"though"><"i"><"cannot"><"tell"><"why"><"this"><"was"><"exactly"><"yet"><"now"><"that"><"i"><"recall"><"all"><"the">
+<"circumstances"><"i"><"think"><"i"><"can"><"see"><"a"><"little"><"into"><"the"><"springs"><"and"><"motives"><"which">
+<"being"><"cunningly"><"presented"><"to"><"me"><"under"><"various"><"disguises"><"induced"><"me"><"to"><"set"><"about">
+<"performing"><"the"><"part"><"i"><"did"><"besides"><"cajoling"><"me"><"into"><"the"><"delusion"><"that"><"it"><"was"><"a">
+<"choice"><"resulting"><"from"><"my"><"own"><"unbiased"><"freewill"><"and"><"discriminating"><"judgment">
+<"chief"><"among"><"these"><"motives"><"was"><"the"><"overwhelming"><"idea"><"of"><"the"><"great"><"whale"><"himself">
+<"such"><"a"><"gortentous"><"and"><"mysterious"><"monster"><"roused"><"all"><"my"><"curiosity"><"then"><"the"><"wild">
+<"and"><"distant"><"seas"><"where"><"he"><"rolled"><"his"><"island"><"bulkthe"><"undeliverable"><"nameless">
+<"perils"><"of"><"the"><"whale"><"these"><"with"><"all"><"the"><"attending"><"marvels"><"of"><"a"><"thousand">
+<"patagonian"><"sights"><"and"><"sounds"><"helped"><"to"><"sway"><"me"><"to"><"my"><"wish"><"with"><"other"><"men">
+<"perhaps"><"such"><"things"><"would"><"not"><"have"><"been"><"inducements"><"but"><"as"><"for"><"me"><"i"><"am">
+<"tormented"><"with"><"an"><"everlasting"><"itch"><"for"><"things"><"remote"><"i"><"love"><"to"><"sail"><"forbidden">
+<"seas"><"and"><"land"><"on"><"barbarous"><"coasts"><"not"><"ignoring"><"what"><"is"><"good"><"i"><"am"><"quick"><"to">
+<"perceive"><"a"><"horror"><"and"><"could"><"still"><"be"><"social"><"with"><"it"><"would"><"they"><"let"><"me"><"since"><"it">
+<"is"><"but"><"well"><"to"><"be"><"on"><"friendly"><"terms"><"with"><"all"><"the"><"inmates"><"of"><"the"><"place"><"one">
+<"lodges"><"in"><"by"><"reason"><"of"><"these"><"things"><"then"><"the"><"whaling"><"voyage"><"was"><"welcome"><"the">
+<"great"><"flood-gates"><"of"><"the"><"wonder-world"><"swung"><"open"><"and"><"in"><"the"><"wild"><"conceits"><"that">
+<"swayed"><"me"><"to"><"my"><"purpose"><"two"><"and"><"two"><"there"><"floated"><"into"><"my"><"inmost"><"soul"><"endless">
+<"processions"><"of"><"the"><"whale"><"and"><"midmost"><"of"><"them"><"all"><"one"><"grand"><"hooded"><"phantom"><"like">
+<"a"><"snow"><"hill"><"in"><"the"><"air">
+```
+
+</details>
+
+```cpp
+Node node(... ip addr of existing node in cluster ...);
+KV kv(node);
+
+Schema* scm = Parser::infer_file_schema("loomings.sor");
+DataFrame *df = kv.create("example", *scm);
+Parser::load_file(*df, "input_file.sor");
+
+class WCRower : public Rower {
+public:
+  std::map<std::string, int> results;
+  bool accept(const Row &row) {
+    const Schema &scm = row.get_schema();
+    for (int i = 0; i < scm.width(); i++) {
+      if (Data::Type::STRING == scm.col_type(i) && !row.is_missing(i)) {
+        const string &s = *row.get<string *>(i);
+        results.try_emplace(s, 0);
+        results[s] += 1;
+      }
+    }
+  }
+
+  void join_delete(Rower *o) {
+    WCRower *other = dynamic_cast<WCRower *>(o);
+    assert(other);
+    for (auto it = other.results.begin(); it != other.results.end(); it++) {
+      results.try_emplace(it->first, 0);
+      results[it->first] += it->second;
+    }
+    delete other;
+  }
+};
+
+WCRower rower;
+df.map(rower);
+
+for (auto it = rower.results.begin(); it != rower.results.end(); it++) {
+    cout << "word: " << it->first << ", count: " << it->second << endl;
+}
+```
+
 # Open questions
 
-Currently, computations must be present on all nodes and precompiled.  It would
+Currently, computations must be present on all nodes and precompiled. It would
 be more flexible to provide either an interpreted language or a higher level
-language which compiles into some precompiled computations.  We have considered
+language which compiles into some precompiled computations. We have considered
 implementing an AST which looks similar to SQL, or using a scripting language,
 possibly Racket, Lua, or NewLISP.
 
-It is unclear how we'd handle adding or removing nodes from the network.  The
+It is unclear how we'd handle adding or removing nodes from the network. The
 data would have to be redistributed at some point, but this would require
 interrupting computations.
 
@@ -101,7 +306,7 @@ data would be lost.
 # Status
 
 The networking layer is mostly done, aside from the callback with the
-interpreter.  The existing codebase has been migrated to C++.  The
+interpreter. The existing codebase has been migrated to C++. The
 implementation for `DataFrame` has to be moved to `DataFrameChunk`, and the
 `DataFrame` itself reimplemented to perform its operations using a `KV`.
 Speaking of, the `KV` itself needs to be implemented.

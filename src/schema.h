@@ -1,5 +1,10 @@
 #pragma once
 
+#include "data.h"
+#include "parser.h"
+#include <iostream>
+#include <vector>
+
 using namespace std;
 
 /*************************************************************************
@@ -10,7 +15,7 @@ using namespace std;
  * The valid types are represented by the chars 'S', 'B', 'I' and 'F'.
  */
 class Schema {
-  vector<char> types;
+  vector<Data::Type> types;
   vector<string *> columns; // column names are external
 
 public:
@@ -30,7 +35,7 @@ public:
   Schema(const char *types_carr) {
     int len = strlen(types_carr);
     for (int i = 0; i < len; i++) {
-      add_column(types_carr[i], nullptr);
+      add_column(Data::char_as_type(types_carr[i]), nullptr);
     }
   }
 
@@ -39,9 +44,21 @@ public:
    * is external.
    */
   void add_column(char type, string *name) {
-    assert(type == 'I' || type == 'B' || type == 'F' || type == 'S');
+    add_column(Data::char_as_type(type), name);
+  }
+
+  /**
+   * Add a column of the given type and name (can be nullptr), name
+   * is external.
+   */
+  void add_column(Data::Type type, string *name) {
     types.push_back(type);
     columns.push_back(name);
+  }
+
+  void set_type(int i, Data::Type type) {
+    assert(width() > i);
+    types[i] = type;
   }
 
   /**
@@ -56,7 +73,7 @@ public:
   /**
    * Return type of column at idx. An idx >= width is undefined behavior.
    */
-  char col_type(int idx) const {
+  Data::Type col_type(int idx) const {
     assert(idx < width());
 
     return types[idx];
@@ -80,7 +97,10 @@ public:
   /**
    * The number of columns
    */
-  int width() const { return types.size(); }
+  int width() const {
+    assert(types.size() == columns.size());
+    return types.size();
+  }
 
   bool equals(const Schema &other) const {
     return types.size() == other.types.size() &&
@@ -88,7 +108,7 @@ public:
            columns.size() == other.columns.size() &&
            equal(columns.begin(), columns.end(), other.columns.begin(),
                  [](const string *l, const string *r) {
-                   return l->compare(*r) == 0;
+                   return l == nullptr ? r == nullptr : l->compare(*r) == 0;
                  });
   }
 
@@ -98,7 +118,7 @@ public:
    */
   void c_str(char *dest) const {
     for (int i = 0; i < width(); i++) {
-      dest[i] = col_type(i);
+      dest[i] = Data::type_as_char(col_type(i));
     }
     dest[width()] = '\0';
   }

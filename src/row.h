@@ -3,11 +3,15 @@
 #include "bytes_reader.h"
 #include "bytes_writer.h"
 #include "data.h"
-#include "object.h"
 #include "schema.h"
+#include <inttypes.h>
 #include <stdlib.h>
 
 using namespace std;
+
+class Schema;
+class BytesReader;
+class BytesWriter;
 
 /*************************************************************************
  * Row::
@@ -31,7 +35,6 @@ public:
   Row(int i, const Schema &scm) : _width(scm.width()), scm(scm), idx(i) {
     data = new Data[width()];
   }
-
   /**
    * Build a row following a schema with default start index.
    */
@@ -43,7 +46,6 @@ public:
   Row(const Row &o) : Row(o.idx, o.scm) {
     memcpy(data, o.data, width() * sizeof(Data));
   }
-
   ~Row() { delete[] data; }
 
   /**
@@ -94,6 +96,13 @@ public:
     data[col].set(val);
   }
 
+  void set(int col, const Data &val) {
+    assert(col < width());
+    data[col] = val;
+  }
+
+  void set_missing(int col) { data[col].set(); }
+
   bool equals(const Row *other) const {
     if (other == nullptr || other->width() != width() ||
         !scm.equals(other->get_schema())) {
@@ -129,7 +138,7 @@ public:
     return true;
   }
 
-  void pack(BytesWriter &writer) {
+  void pack(BytesWriter &writer) const {
     writer.pack('R');
     writer.pack(idx);
     writer.pack((int)width());
@@ -164,9 +173,9 @@ public:
    * allocates a Row based on the next bytes in the reader
    */
   static Row *unpack(const Schema &scm, BytesReader &reader) {
-    assert(reader.yield_char() == 'R');
-    int idx = reader.yield_int();
-    int width = reader.yield_int();
+    assert(reader.yield<char>() == 'R');
+    int idx = reader.yield<int>();
+    int width = reader.yield<int>();
 
     /* collect types for schema */
     char types[width + 1];
@@ -175,24 +184,24 @@ public:
     /* assert unpacking correct schema */
     assert(scm.width() == width);
     for (int i = 0; i < width; i++) {
-      assert(types[i] == scm.col_type(i));
+      assert(Data::char_as_type(types[i]) == scm.col_type(i));
     }
 
     Row *row = new Row(idx, scm);
 
     /* collect data based on schema */
     for (int i = 0; i < width; ++i) {
-      switch (scm.col_type(i)) {
+      switch (types[i]) {
       case 'B': {
-        row->set(i, reader.yield_bool());
+        row->set(i, reader.yield<bool>());
         break;
       }
       case 'I': {
-        row->set(i, reader.yield_int());
+        row->set(i, reader.yield<int>());
         break;
       }
       case 'F': {
-        row->set(i, reader.yield_float());
+        row->set(i, reader.yield<float>());
         break;
       }
       case 'S': {
@@ -208,9 +217,9 @@ public:
   }
 
   static Row *unpack(BytesReader &reader) {
-    assert(reader.yield_char() == 'R');
-    int idx = reader.yield_int();
-    int width = reader.yield_int();
+    assert(reader.yield<char>() == 'R');
+    int idx = reader.yield<int>();
+    int width = reader.yield<int>();
 
     /* collect types for schema */
     char types[width + 1];
@@ -221,19 +230,19 @@ public:
     /* collect data based on schema */
     for (int i = 0; i < width; ++i) {
       switch (scm->col_type(i)) {
-      case 'B': {
-        row->set(i, reader.yield_bool());
+      case Data::Type::BOOL: {
+        row->set(i, reader.yield<bool>());
         break;
       }
-      case 'I': {
-        row->set(i, reader.yield_int());
+      case Data::Type::INT: {
+        row->set(i, reader.yield<int>());
         break;
       }
-      case 'F': {
-        row->set(i, reader.yield_float());
+      case Data::Type::FLOAT: {
+        row->set(i, reader.yield<float>());
         break;
       }
-      case 'S': {
+      case Data::Type::STRING: {
         // TODO: Not clear who owns this allocated string
         row->set(i, reader.yield_string_ptr());
         break;
@@ -245,7 +254,7 @@ public:
     return row;
   }
 
-  void print(bool with_meta = true) {
+  void print(bool with_meta) const {
     if (with_meta) {
       cout << "Row<" << this << ">(scm: '";
       for (int i = 0; i < width(); i++) {
@@ -256,7 +265,7 @@ public:
 
     for (int i = 0; i < width(); i++) {
       cout << '<';
-      switch (scm.col_type(i)) {
+      switch (Data::type_as_char(scm.col_type(i))) {
       case 'I':
         cout << get<int>(i);
         break;
@@ -278,3 +287,8 @@ public:
     cout << endl;
   }
 };
+
+template int Row::get<int>(int) const;
+template float Row::get<float>(int) const;
+template bool Row::get<bool>(int) const;
+template string *Row::get<string *>(int) const;

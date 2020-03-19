@@ -1,5 +1,12 @@
+DEBUG=true
 CC=g++
-CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-return-type
+
+ifeq ($(DEBUG),true)
+	CCOPTS=-Ofast --std=c++17 -Wno-varargs
+else
+	CCOPTS==-O0 -g --std=c++17 -Wno-varargs -W@all
+endif
+
 CPATH=src
 
 SHARED_HEADER_FILES=src/*
@@ -7,10 +14,14 @@ SRC_DIR=src
 BUILD_DIR=build
 
 run: build
-	./example.exe datafile.sor
+	$(BUILD_DIR)/example.exe datafile.sor
 
-$(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
+$(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
+	$(CC) $(CCOPTS) -c $< -o $@
+
 
 build: $(BUILD_DIR)/example.exe
 

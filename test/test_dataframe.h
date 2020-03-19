@@ -26,14 +26,14 @@ TEST_F(TestDataFrame, test__add_column__ncols) {
   EXPECT_EQ(df->ncols(), 4);
 
   /* adding column, should only affect internal schema */
-  df->add_column('I');
+  df->add_column(Data::Type::INT, new string("int col"));
   EXPECT_EQ(scm->width(), 4);             // does not affect external schema
   EXPECT_EQ(df->get_schema().width(), 5); // affects internals schema
   /* ensure ncols grows */
   EXPECT_EQ(df->ncols(), 5);
 
   string name("apples");
-  df->add_column('B', &name);
+  df->add_column(Data::Type::BOOL, &name);
   EXPECT_EQ(df->get_schema().width(), 6); // affects internals schema
   /* ensure ncols grows again */
   EXPECT_EQ(df->ncols(), 6);

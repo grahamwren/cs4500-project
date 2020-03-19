@@ -1,6 +1,7 @@
 #pragma once
 
 #include "column.h"
+#include "data.h"
 #include "row.h"
 #include "rower.h"
 #include "schema.h"
@@ -13,6 +14,10 @@ using namespace std;
 #ifndef THREAD_COUNT
 #define THREAD_COUNT std::thread::hardware_concurrency()
 #endif
+
+class Row;
+class Column;
+class Data;
 
 /****************************************************************************
  * DataFrame::
@@ -27,19 +32,22 @@ protected:
   Schema schema;
   vector<Column *> columns;
 
-  void init_col(char tc) {
-    switch (tc) {
-    case 'I':
+  void init_col(Data::Type t) {
+    switch (t) {
+    case Data::Type::INT:
       columns.push_back(new TypedColumn<int>()); // OWNED
       break;
-    case 'F':
+    case Data::Type::FLOAT:
       columns.push_back(new TypedColumn<float>()); // OWNED
       break;
-    case 'B':
+    case Data::Type::BOOL:
       columns.push_back(new TypedColumn<bool>()); // OWNED
       break;
-    case 'S':
+    case Data::Type::STRING:
       columns.push_back(new TypedColumn<string *>()); // OWNED
+      break;
+    case Data::Type::MISSING:
+      columns.push_back(new TypedColumn<bool>());
       break;
     default:
       assert(false); // unsupported column type
@@ -59,18 +67,27 @@ protected:
     int len = ncols();
     row.set_idx(idx);
     for (int i = 0; i < len; ++i) {
-      char type = schema.col_type(i);
+      Data::Type type = schema.col_type(i);
       Column *col = columns[i];
-      if (type == 'S') {
-        row.set(i, col->as<string *>().get(idx));
-      } else if (type == 'I') {
+      switch (type) {
+      case Data::Type::INT:
         row.set(i, col->as<int>().get(idx));
-      } else if (type == 'F') {
+        break;
+      case Data::Type::FLOAT:
         row.set(i, col->as<float>().get(idx));
-      } else if (type == 'B') {
+        break;
+      case Data::Type::BOOL:
         row.set(i, col->as<bool>().get(idx));
-      } else
-        assert(false);
+        break;
+      case Data::Type::STRING:
+        row.set(i, col->as<string *>().get(idx));
+        break;
+      case Data::Type::MISSING:
+        row.set_missing(i);
+        break;
+      default:
+        assert(false); // unsupported column type
+      }
     }
   }
 
@@ -93,7 +110,7 @@ public:
     }
   }
 
-  ~DataFrame() {
+  virtual ~DataFrame() {
     for (auto it = columns.begin(); it != columns.end(); it++)
       delete *it; // clean-up owned columns
     for (int i = 0; i < schema.width(); i++) {
@@ -112,7 +129,7 @@ public:
    * appears as the last column of the dataframe, the name is optional, but is
    * copied and owned by this DataFrame.
    */
-  void add_column(char type, const string *ext_name = nullptr) {
+  void add_column(Data::Type type, const string *ext_name) {
     init_col(type);
     string *name = ext_name ? new string(*ext_name) : nullptr;
     schema.add_column(type, name);
@@ -127,17 +144,27 @@ public:
     assert(row.width() == ncols());
     int num_cols = schema.width();
     for (int i = 0; i < num_cols; ++i) {
-      char type = schema.col_type(i);
       Column *col = columns[i];
-      if (type == 'S') {
-        col->as<string *>().push(row.get<string *>(i));
-      } else if (type == 'I') {
+      if (row.is_missing(i)) {
+        col->push_missing();
+        continue;
+      }
+      Data::Type type = schema.col_type(i);
+      switch (type) {
+      case Data::Type::INT:
         col->as<int>().push(row.get<int>(i));
-      } else if (type == 'F') {
-        col->as<float>().push(row.get<float>(i));
-      } else if (type == 'B') {
+        break;
+      case Data::Type::BOOL:
         col->as<bool>().push(row.get<bool>(i));
-      } else {
+        break;
+      case Data::Type::FLOAT:
+        col->as<float>().push(row.get<float>(i));
+        break;
+      case Data::Type::STRING:
+        col->as<string *>().push(row.get<string *>(i));
+        break;
+      case Data::Type::MISSING:
+      default:
         assert(false);
       }
     }
@@ -228,22 +255,18 @@ public:
     // TODO: VirtualRow
   }
 
-  bool equals(const DataFrame *other) const {
-    if (other == nullptr) {
-      return false;
-    }
-
-    if (!schema.equals(other->schema)) {
+  bool equals(const DataFrame &other) const {
+    if (!schema.equals(other.schema)) {
       return false;
     }
 
     int len = ncols();
-    if (len != other->ncols())
+    if (len != other.ncols())
       return false;
 
     for (int i = 0; i < len; ++i) {
       Column *col = columns[i];
-      Column *other_col = other->columns[i];
+      Column *other_col = other.columns[i];
       if (!col->equals(*other_col))
         return false;
     }

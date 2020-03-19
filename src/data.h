@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <variant>
 
@@ -11,7 +12,7 @@ protected:
   variant<int, float, bool, string *> data;
 
 public:
-  enum Type : uint8_t { MISSING = 0, BOOL = 1, INT = 2, FLOAT = 3, STRING = 4 };
+  enum Type : uint8_t { MISSING = 1, BOOL = 2, INT = 3, FLOAT = 4, STRING = 5 };
   static char type_as_char(const Type t) {
     switch (t) {
     case Data::Type::INT:
@@ -40,6 +41,7 @@ public:
     case 'M':
       return Data::Type::MISSING;
     }
+    cerr << "Failing to find type for char: " << c << endl;
     assert(false);
   }
 
@@ -56,13 +58,16 @@ public:
       assert(false);
   }
 
+  static Type combine(const Type &left, const Type &right) {
+    return left > right ? left : right;
+  }
+
   Data() : missing(true) {}
   Data(int val) : missing(false), data(val) {}
   Data(float val) : missing(false), data(val) {}
   Data(bool val) : missing(false), data(val) {}
   Data(string *val) : missing(false), data(val) {}
   Data(Data &d) = default;
-  Data(Data &&d) = default;
   bool is_missing() const { return missing; }
 
   template <typename T> T get() const {
@@ -91,8 +96,8 @@ public:
 
 class TypedData {
 public:
-  const Data data;
-  const Data::Type type;
+  Data data;
+  Data::Type type;
   TypedData() : data(), type(Data::Type::MISSING) {}
   TypedData(int val) : data(val), type(Data::Type::INT) {}
   TypedData(float val) : data(val), type(Data::Type::FLOAT) {}

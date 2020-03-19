@@ -1,6 +1,6 @@
 #pragma once
 
-#include "object.h"
+class Row;
 
 /*******************************************************************************
  *  Rower::
@@ -8,8 +8,10 @@
  *  is that this class should subclassed and the accept() method be given
  *  a meaningful implementation. Rowers can be cloned for parallel execution.
  */
-class Rower : public Object {
+class Rower {
 public:
+  virtual ~Rower() {}
+
   /**
    * This method is called once per row. The row object is on loan and
    * should not be retained as it is likely going to be reused in the next

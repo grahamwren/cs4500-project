@@ -1,6 +1,5 @@
 #pragma once
-// lang::Cpp
-#include "object.h"
+
 #include <atomic>
 #include <condition_variable>
 #include <cstdlib>
@@ -10,7 +9,7 @@
 
 /** A Thread wraps the thread operations in the standard library.
  *  author: vitekj@me.com */
-class Thread : public Object {
+class Thread {
 public:
   std::thread thread_;
 
@@ -44,7 +43,7 @@ public:
 };
 
 /** A convenient lock and condition variable wrapper. */
-class Lock : public Object {
+class Lock {
 public:
   std::mutex mtx_;
   std::condition_variable_any cv_;
@@ -71,7 +70,7 @@ public:
 };
 
 /** A simple thread-safe counter. */
-class Counter : public Object {
+class Counter {
 public:
   std::atomic<size_t> next_;
 

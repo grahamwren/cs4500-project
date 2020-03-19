@@ -1,6 +1,9 @@
 #pragma once
 
-// lang::CwC
+#include <stack>
+#include <string>
+
+using namespace std;
 
 /**
  * a class which consumes a bytes array of a known length and allows extraction
@@ -9,9 +12,10 @@
  */
 class BytesReader {
 public:
-  int position = 0;
+  int cursor = 0;
   int length = 0;
   const uint8_t *bytes = nullptr; // EXTERNAL
+  stack<int> checkpoints;
 
   /**
    * construct a reader with a bytes array and a length
@@ -19,50 +23,28 @@ public:
   BytesReader(int len, const uint8_t *input) : length(len), bytes(input) {}
 
   /**
-   * yield_*, where * is the type T.
+   * yield primitive
    * Returns sizeof(T) bytes as a value of T and moves the iterator forward
    * sizeof(T) bytes. Behavior undefined if does not contain sizeof(T) bytes
    * still left in the iter.
    */
-  const char &yield_char() {
-    const char &val = peek_char();
-    position += sizeof(char);
-    return val;
-  }
+  template <typename T> T yield() {
+    static_assert(is_literal_type_v<T> && !is_pointer_v<T>);
 
-  const bool &yield_bool() {
-    const bool &val = peek_bool();
-    position += sizeof(bool);
-    return val;
-  }
-
-  const int &yield_int() {
-    const int &val = peek_int();
-    position += sizeof(int);
-    return val;
-  }
-
-  const float &yield_float() {
-    const float &val = peek_float();
-    position += sizeof(float);
-    return val;
-  }
-
-  const double &yield_double() {
-    const double &val = peek_double();
-    position += sizeof(double);
+    T val = peek<T>();
+    cursor += sizeof(T);
     return val;
   }
 
   /**
    * copy the next char[] into the dst buffer, dst must be at least the length
-   * of the char[] + 1. Move the position past this char[].
+   * of the char[] + 1. Move the cursor past this char[].
    */
   void yield_c_arr(char *const &dst) {
-    const int &len = peek_int();
+    const int &len = peek<int>();
     peek_c_arr(dst);
     /* move forward: sizeof len + len of char[] (not including null term) */
-    position += sizeof(int) + (len * sizeof(char));
+    cursor += sizeof(int) + (len * sizeof(char));
   }
 
   /**
@@ -74,45 +56,55 @@ public:
   string *yield_string_ptr() {
     string *s = peek_string();
     /* move forward: sizeof(len) + len of string (not including null term) */
-    position += sizeof(int) + (s->size() * sizeof(char));
+    cursor += sizeof(int) + (s->size() * sizeof(char));
     return s;
   }
 
   /**
-   * peek_*, where * is the type T.
+   * expect the next bytes to be the given value, only move cursor forward if
+   * found value
+   */
+  template <typename T> bool expect(T val) {
+    static_assert(is_literal_type_v<T> && !is_pointer_v<T>);
+
+    T next_t = peek<T>();
+    if (val == next_t) {
+      cursor += sizeof(T);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * checkpoint the current cursor position
+   */
+  void checkpoint() { checkpoints.push(cursor); }
+
+  /**
+   * commit the last checkpoint
+   */
+  void commit() { checkpoints.pop(); }
+
+  /**
+   * reset the cursor position to the last checkpoint
+   */
+  void rollback() {
+    cursor = checkpoints.top();
+    commit();
+  }
+
+  /**
+   * peek primitives
    * Returns sizeof(T) bytes as a value of T and does NOT move the iterator
    * forward. Behavior undefined if does not contain sizeof(T) bytes still left
    * in the iter.
    */
-  const char &peek_char() const {
-    assert(position + sizeof(char) <= length);
-    const char *char_ptr = reinterpret_cast<const char *>(bytes + position);
-    return *char_ptr;
-  }
+  template <typename T> T peek() const {
+    static_assert(is_literal_type_v<T> && !is_pointer_v<T>);
+    assert(cursor + sizeof(T) <= length);
 
-  const bool &peek_bool() const {
-    assert(position + sizeof(bool) <= length);
-    const bool *bool_ptr = reinterpret_cast<const bool *>(bytes + position);
-    return *bool_ptr;
-  }
-
-  const int &peek_int() const {
-    assert(position + sizeof(int) <= length);
-    const int *int_ptr = reinterpret_cast<const int *>(bytes + position);
-    return *int_ptr;
-  }
-
-  const float &peek_float() const {
-    assert(position + sizeof(float) <= length);
-    const float *float_ptr = reinterpret_cast<const float *>(bytes + position);
-    return *float_ptr;
-  }
-
-  const double &peek_double() const {
-    assert(position + sizeof(double) <= length);
-    const double *double_ptr =
-        reinterpret_cast<const double *>(bytes + position);
-    return *double_ptr;
+    const T *type_ptr = reinterpret_cast<const T *>(bytes + cursor);
+    return *type_ptr;
   }
 
   /**
@@ -121,9 +113,9 @@ public:
    * otherwise undefined behavior
    */
   void peek_c_arr(char *const &dst) const {
-    const int &len = peek_int();
+    const int &len = peek<int>();
     // skip len int
-    const uint8_t *const &c_arr_start = bytes + position + sizeof(int);
+    const uint8_t *const &c_arr_start = bytes + cursor + sizeof(int);
     memcpy(dst, c_arr_start, len);
     dst[len] = '\0'; // add null-terminator
   }
@@ -136,12 +128,17 @@ public:
    * missing move constructors
    */
   string *peek_string() const {
-    const int &len = peek_int();
+    const int &len = peek<int>();
     char buf[len + 1];
     peek_c_arr(buf);
     return new string(buf, len);
   }
 
-  bool empty() const { return position == length; }
+  bool empty() const { return cursor == length; }
   bool has_next() const { return !empty(); }
+  int cursor_pos() const { return cursor; }
 };
+
+template char BytesReader::peek<char>() const;
+template char BytesReader::yield<char>();
+template bool BytesReader::expect<char>(char);

@@ -89,6 +89,8 @@ public:
     data = val;
   }
   void set(string *val) {
+    assert(val); // cannot be nullptr, should be missing
+
     missing = false;
     data = val;
   }

@@ -46,21 +46,21 @@ bool Parser::infer_schema(Schema &scm) {
 }
 
 /**
- * parse_row: parse types from row, combining types if some already exist
+ * parse_row_types: parse types from row, combining types if some already exist
  */
 bool Parser::parse_row_types(Schema &scm) {
   input.checkpoint();
 
-  TypedData d;
+  Data::Type t;
   bool accept = false;
-  for (int i = 0; input.has_next() && parse_val(d); i++) {
+  for (int i = 0; input.has_next() && parse_val_type(t); i++) {
     accept = true;
     if (scm.width() > i) {
-      Data::Type t = Data::combine(scm.col_type(i), d.type);
+      t = Data::combine(scm.col_type(i), t);
       scm.set_type(i, t);
     } else {
       assert(scm.width() == i); // no skipping
-      scm.add_column(d.type, nullptr);
+      scm.add_column(t, nullptr);
     }
   }
 
@@ -89,6 +89,8 @@ bool Parser::parse_row(const Schema &scm, Row &dest) {
     if (parse_val(scm.col_type(i), d)) {
       accept = true;
       dest.set(i, d);
+    } else {
+      dest.set_missing(i);
     }
   }
 
@@ -154,20 +156,24 @@ bool Parser::parse_val(const Data::Type type, Data &dest) {
  * matched by first successful parse in this order:
  *   [MISSING, BOOL, INT, FLOAT, STRING]
  */
-bool Parser::parse_val(TypedData &dest) {
+bool Parser::parse_val_type(Data::Type &type) {
   input.checkpoint();
 
+  Data data;
   bool accept = input.expect<char>('<') &&
-                ((parse_missing(dest.data) && input.expect<char>('>') &&
-                  (dest.type = Data::Type::MISSING)) ||
-                 (parse_bool(dest.data) && input.expect<char>('>') &&
-                  (dest.type = Data::Type::BOOL)) ||
-                 (parse_int(dest.data) && input.expect<char>('>') &&
-                  (dest.type = Data::Type::INT)) ||
-                 (parse_float(dest.data) && input.expect<char>('>') &&
-                  (dest.type = Data::Type::FLOAT)) ||
-                 (parse_string(dest.data) && input.expect<char>('>') &&
-                  (dest.type = Data::Type::STRING)));
+                ((parse_missing(data) && input.expect<char>('>') &&
+                  (type = Data::Type::MISSING)) ||
+                 (parse_bool(data) && input.expect<char>('>') &&
+                  (type = Data::Type::BOOL)) ||
+                 (parse_int(data) && input.expect<char>('>') &&
+                  (type = Data::Type::INT)) ||
+                 (parse_float(data) && input.expect<char>('>') &&
+                  (type = Data::Type::FLOAT)) ||
+                 (parse_string(data) && input.expect<char>('>') &&
+                  (type = Data::Type::STRING)));
+
+  if (accept && type == Data::Type::STRING)
+    delete data.get<string *>();
 
   if (accept) {
     input.commit();

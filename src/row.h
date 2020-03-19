@@ -95,6 +95,8 @@ public:
 
   void set(int col, string *val) {
     assert(col < width());
+    assert(val); // cannot be nullptr, should be missing
+
     data[col].set(val);
   }
 
@@ -267,19 +269,24 @@ public:
 
     for (int i = 0; i < width(); i++) {
       cout << '<';
-      switch (Data::type_as_char(scm.col_type(i))) {
-      case 'I':
-        cout << get<int>(i);
-        break;
-      case 'F':
-        cout << get<float>(i);
-        break;
-      case 'B':
-        cout << get<bool>(i);
-        break;
-      case 'S':
-        cout << '"' << get<string *>(i)->c_str() << '"';
-        break;
+      if (!is_missing(i)) {
+        switch (Data::type_as_char(scm.col_type(i))) {
+        case 'I':
+          cout << get<int>(i);
+          break;
+        case 'F':
+          cout << get<float>(i);
+          break;
+        case 'B':
+          cout << get<bool>(i);
+          break;
+        case 'S':
+          string *s = get<string *>(i);
+          cout << "string: " << (void *)s << " " << flush;
+          assert(s);
+          cout << '"' << get<string *>(i)->c_str() << '"';
+          break;
+        }
       }
       cout << '>';
     }

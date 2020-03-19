@@ -115,14 +115,27 @@ public:
       return equal(data.begin(), data.end(), other.data.begin());
   }
 
-  T get(int i) const { return data[i]; }
+  T get(int i) const {
+    assert(i < data.size());
+    assert(!is_missing(i)); // cannot get() missing value
+    if (is_pointer_v<T>)
+      assert(data[i]); // must not be nullptr, should be missing
+
+    return data[i];
+  }
   void set(int i, T val) {
     assert(i < data.size());
+    if (is_pointer_v<T>)
+      assert(val); // must not be nullptr, should be missing
+
     missings[i] = false;
     data[i] = val;
   }
   void push(T val) {
     assert(missings.size() == data.size());
+    if (is_pointer_v<T>)
+      assert(val); // must not be nullptr, should be missing
+
     missings.push_back(false);
     data.push_back(val);
   }

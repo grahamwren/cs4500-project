@@ -59,7 +59,7 @@ public:
    * matched by first successful parse in this order:
    *   [MISSING, BOOL, INT, FLOAT, STRING]
    */
-  bool parse_val(TypedData &dest);
+  bool parse_val_type(Data::Type &);
 
   /**
    * parses a missing (i.e. ">?")

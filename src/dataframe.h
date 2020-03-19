@@ -48,7 +48,7 @@ protected:
       columns.push_back(new TypedColumn<string *>()); // OWNED
       break;
     case Data::Type::MISSING:
-      columns.push_back(new TypedColumn<bool>());
+      columns.push_back(new TypedColumn<bool>()); // OWNED
       break;
     default:
       assert(false); // unsupported column type
@@ -70,24 +70,30 @@ protected:
     for (int i = 0; i < len; ++i) {
       Data::Type type = schema.col_type(i);
       Column *col = columns[i];
-      switch (type) {
-      case Data::Type::INT:
-        row.set(i, col->as<int>().get(idx));
-        break;
-      case Data::Type::FLOAT:
-        row.set(i, col->as<float>().get(idx));
-        break;
-      case Data::Type::BOOL:
-        row.set(i, col->as<bool>().get(idx));
-        break;
-      case Data::Type::STRING:
-        row.set(i, col->as<string *>().get(idx));
-        break;
-      case Data::Type::MISSING:
+      assert(col);
+
+      if (col->is_missing(idx))
         row.set_missing(i);
-        break;
-      default:
-        assert(false); // unsupported column type
+      else {
+        switch (type) {
+        case Data::Type::INT:
+          row.set(i, col->as<int>().get(idx));
+          break;
+        case Data::Type::FLOAT:
+          row.set(i, col->as<float>().get(idx));
+          break;
+        case Data::Type::BOOL:
+          row.set(i, col->as<bool>().get(idx));
+          break;
+        case Data::Type::STRING:
+          row.set(i, col->as<string *>().get(idx));
+          break;
+        case Data::Type::MISSING:
+          row.set_missing(i);
+          break;
+        default:
+          assert(false); // unsupported column type
+        }
       }
     }
   }

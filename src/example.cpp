@@ -1,7 +1,7 @@
-#include "dataframe.h"
 #include "parser.h"
 #include "row.h"
 #include "schema.h"
+#include "simple_dataframe.h"
 #include <iostream>
 
 using namespace std;
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
   Parser p(file_len, bytes);
   Schema scm;
   p.infer_schema(scm);
-  DataFrame df(scm);
+  SimpleDataFrame df(scm);
   if (!p.parse_file(df)) {
     cerr << "Failed to parse dataframe" << endl;
     exit(-1);
@@ -50,7 +50,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 25; i++) {
       cout << "| ";
       if (i < df.nrows()) {
-        cout << df.get<int>(first_num_col, i);
+        cout << (df.is_missing(i, first_num_col)
+                     ? ' '
+                     : df.get_int(i, first_num_col));
       } else {
         cout << " ";
       }
@@ -61,7 +63,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 25; i++) {
       cout << "| ";
       if (i < df.nrows()) {
-        cout << df.get<float>(first_num_col, i);
+        cout << (df.is_missing(i, first_num_col)
+                     ? ' '
+                     : df.get_float(i, first_num_col));
       } else {
         cout << "-";
       }

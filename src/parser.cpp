@@ -3,45 +3,46 @@
 #include "row.h"
 #include "schema.h"
 
-Parser::Parser(int len, char *d) : input(len, reinterpret_cast<uint8_t *>(d)) {}
+Parser::Parser(int len, char *d)
+    : cursor(len, reinterpret_cast<uint8_t *>(d)) {}
 Parser::Parser(const char *d) : Parser(strlen(d), const_cast<char *>(d)) {}
 
-bool Parser::empty() const { return input.empty(); }
-int Parser::parse_pos() const { return input.cursor_pos(); }
+bool Parser::out_of_input() const { return empty(cursor); }
+int Parser::parse_pos() const { return cursor.cursor - cursor.bytes; }
 
 bool Parser::parse_file(DataFrame &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   bool accept = false;
   Row row(dest.get_schema());
-  for (int i = 0; input.has_next() && parse_row(dest.get_schema(), row); i++) {
-    accept = true;
+  while (has_next(cursor) && parse_row(dest.get_schema(), row)) {
+    accept = true; // parsed at least one row
     dest.add_row(row);
   }
-  accept = accept && input.empty();
+  accept = accept && empty(cursor);
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
 
 bool Parser::infer_schema(Schema &scm) {
-  input.checkpoint(); // set checkpoint to rollback to
+  checkpoint(cursor); // set checkpoint to rollback to
 
-  /* only consume 500 lines to infer schema */
-  for (int i = 0; i < 500; i++) {
+  /* consume 500 lines or entire input to infer schema */
+  for (int i = 0; i < 500 && has_next(cursor); i++) {
     bool accepted = parse_row_types(scm);
 
-    /* break if less then 500 rows: out of input or failed to parse row */
-    if (empty() || !accepted) {
+    /* break if failed to parse */
+    if (!accepted) {
       break;
     }
   }
 
-  input.rollback(); // rollback to start of buffer
+  rollback(cursor); // rollback to start of buffer
   return true;
 }
 
@@ -49,11 +50,11 @@ bool Parser::infer_schema(Schema &scm) {
  * parse_row_types: parse types from row, combining types if some already exist
  */
 bool Parser::parse_row_types(Schema &scm) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   Data::Type t;
   bool accept = false;
-  for (int i = 0; input.has_next() && parse_val_type(t); i++) {
+  for (int i = 0; has_next(cursor) && parse_val_type(t); i++) {
     accept = true;
     if (scm.width() > i) {
       t = Data::combine(scm.col_type(i), t);
@@ -65,12 +66,12 @@ bool Parser::parse_row_types(Schema &scm) {
   }
 
   /* accept if we've read the entire input or found a new-line */
-  accept = accept && (input.empty() || input.expect<char>('\n'));
+  accept = accept && (empty(cursor) || expect<char>(cursor, '\n'));
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -81,7 +82,7 @@ bool Parser::parse_row_types(Schema &scm) {
  *                 row
  */
 bool Parser::parse_row(const Schema &scm, Row &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   Data d;
   bool accept = false;
@@ -95,12 +96,12 @@ bool Parser::parse_row(const Schema &scm, Row &dest) {
   }
 
   /* accept if we've read the entire input or found a new-line */
-  accept = accept && (input.empty() || input.expect<char>('\n'));
+  accept = accept && (empty(cursor) || expect<char>(cursor, '\n'));
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -114,10 +115,10 @@ bool Parser::parse_row(const Schema &scm, Row &dest) {
  * indicate a failed parse, or will contain a Data in the result
  */
 bool Parser::parse_val(const Data::Type type, Data &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   bool accept = false;
-  if (input.expect<char>('<')) {
+  if (expect<char>(cursor, '<')) {
     switch (type) {
     case Data::Type::BOOL:
       accept = parse_bool(dest);
@@ -141,12 +142,12 @@ bool Parser::parse_val(const Data::Type type, Data &dest) {
       accept = parse_missing(dest);
     }
   }
-  accept = accept && input.expect<char>('>');
+  accept = accept && expect<char>(cursor, '>');
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -157,28 +158,28 @@ bool Parser::parse_val(const Data::Type type, Data &dest) {
  *   [MISSING, BOOL, INT, FLOAT, STRING]
  */
 bool Parser::parse_val_type(Data::Type &type) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   Data data;
-  bool accept = input.expect<char>('<') &&
-                ((parse_missing(data) && input.expect<char>('>') &&
+  bool accept = expect<char>(cursor, '<') &&
+                ((parse_missing(data) && expect<char>(cursor, '>') &&
                   (type = Data::Type::MISSING)) ||
-                 (parse_bool(data) && input.expect<char>('>') &&
+                 (parse_bool(data) && expect<char>(cursor, '>') &&
                   (type = Data::Type::BOOL)) ||
-                 (parse_int(data) && input.expect<char>('>') &&
+                 (parse_int(data) && expect<char>(cursor, '>') &&
                   (type = Data::Type::INT)) ||
-                 (parse_float(data) && input.expect<char>('>') &&
+                 (parse_float(data) && expect<char>(cursor, '>') &&
                   (type = Data::Type::FLOAT)) ||
-                 (parse_string(data) && input.expect<char>('>') &&
+                 (parse_string(data) && expect<char>(cursor, '>') &&
                   (type = Data::Type::STRING)));
 
   if (accept && type == Data::Type::STRING)
     delete data.get<string *>();
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -188,44 +189,46 @@ bool Parser::parse_val_type(Data::Type &type) {
  */
 bool Parser::parse_missing(Data &dest) {
   dest.set();
-  return input.empty() || input.peek<char>() == '>';
+  return empty(cursor) || peek<char>(cursor) == '>';
 }
 
 /**
  * parses an int (i.e. "[+-]?[[:digit:]]+>?")
  */
 bool Parser::parse_int(Data &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   int i = 0;
   char val[MAX_VAL_LEN];
   bool accept = false;
 
-  char c = input.peek<char>(); // read first digit
+  char c = peek<char>(cursor); // read first digit
   /* if is: "[+-[:digit:]]", set accept if we read a digit */
   if (c == '+' || c == '-' || (accept = isdigit(c))) {
-    val[i++] = input.yield<char>();
+    val[i++] = yield<char>(cursor);
   } else { // if is: "[^+-[:digit:]]", fail immediately
-    input.rollback();
+    rollback(cursor);
     return accept;
   }
 
   /* read: "[[:digit:]]*" */
-  while (input.has_next() && isdigit(input.peek<char>())) {
+  while (has_next(cursor) && isdigit(peek<char>(cursor))) {
     /* since we've read a digit we can accept this input */
     accept = true;
-    val[i++] = input.yield<char>();
+    val[i++] = yield<char>(cursor);
   }
   /* successful if accepting and we've consumed entire val */
-  accept = accept && (input.empty() || input.peek<char>() == '>');
+  accept = accept && (empty(cursor) || peek<char>(cursor) == '>');
 
   /* if can be safely converted to an int */
   if (accept) {
     val[i] = '\0'; // ensure null terminated
-    dest.set((int)strtoimax(val, nullptr, 10));
-    input.commit();
+    int result;
+    from_chars(val, val + i, result);
+    dest.set(result);
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -234,23 +237,23 @@ bool Parser::parse_int(Data &dest) {
  * parses a bool (i.e. "[01]>?")
  */
 bool Parser::parse_bool(Data &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   bool accept = false;
-  if (input.expect<char>('1')) {
+  if (expect<char>(cursor, '1')) {
     accept = true;
     dest.set(true);
-  } else if (input.expect<char>('0')) {
+  } else if (expect<char>(cursor, '0')) {
     accept = true;
     dest.set(false);
   }
   /* successful if we parsed a bool and done with the input */
-  accept = accept && (input.empty() || input.peek<char>() == '>');
+  accept = accept && (empty(cursor) || peek<char>(cursor) == '>');
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -259,38 +262,38 @@ bool Parser::parse_bool(Data &dest) {
  * parses a float (i.e. "[+-]?[[:digit:]]+(\.[[:digit]]+)?>?")
  */
 bool Parser::parse_float(Data &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   int i = 0;
   char val[MAX_VAL_LEN];
   bool accept = false;
 
-  const char &c = input.peek<char>(); // read first digit
+  const char &c = peek<char>(cursor); // read first digit
   /* if is: "[+-[:digit:]]", set accept if we read a digit */
   if (c == '+' || c == '-' || (accept = isdigit(c))) {
-    val[i++] = input.yield<char>();
+    val[i++] = yield<char>(cursor);
   } else { // if is: "[^+-[:digit:]]", fail immediately
-    input.rollback();
+    rollback(cursor);
     return accept;
   }
 
   /* read: "[[:digit:]]*" */
-  while (input.has_next() && isdigit(input.peek<char>())) {
+  while (has_next(cursor) && isdigit(peek<char>(cursor))) {
     /* since we've read a digit we can accept this input */
     accept = true;
-    val[i++] = input.yield<char>();
+    val[i++] = yield<char>(cursor);
   }
 
   /* TODO: above duplicated from parse_int */
 
   /* if: "(?<=[[:digit:]])\." */
-  if (accept && input.peek<char>() == '.') {
-    val[i++] = input.yield<char>();
+  if (accept && peek<char>(cursor) == '.') {
+    val[i++] = yield<char>(cursor);
     accept = false; // reset accept to require numbers after the dec
     /* read: "[[:digit:]]+" */
-    while (input.has_next() && isdigit(input.peek<char>())) {
+    while (has_next(cursor) && isdigit(peek<char>(cursor))) {
       accept = true;
-      val[i++] = input.yield<char>();
+      val[i++] = yield<char>(cursor);
     }
   }
 
@@ -299,13 +302,13 @@ bool Parser::parse_float(Data &dest) {
     val[i] = '\0'; // ensure null terminated
     dest.set(strtof(val, nullptr));
     /* successful if we've consumed entire val */
-    accept = input.empty() || input.peek<char>() == '>';
+    accept = empty(cursor) || peek<char>(cursor) == '>';
   }
 
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }
@@ -314,34 +317,37 @@ bool Parser::parse_float(Data &dest) {
  * parses a string (i.e. '("[^"]*"|[^>]*)>?')
  */
 bool Parser::parse_string(Data &dest) {
-  input.checkpoint();
+  checkpoint(cursor);
 
   int i = 0;
   char buf[MAX_VAL_LEN];
   bool accept;
   /* check for quoted string */
-  if (input.expect<char>('"')) {
-    while (input.has_next() && input.peek<char>() != '"') {
-      buf[i++] = input.yield<char>();
+  if (expect<char>(cursor, '"')) {
+    char c;
+    while (has_next(cursor) && (c = yield<char>(cursor)) != '"') {
+      buf[i++] = c;
     }
-    accept = input.expect<char>('"');
+    accept = c == '"' && (peek<char>(cursor) == '>' || empty(cursor));
   } else {
-    while (input.has_next() && input.peek<char>() != '>') {
-      buf[i++] = input.yield<char>();
+    char c;
+    while (has_next(cursor) && (c = yield<char>(cursor)) != '>') {
+      buf[i++] = c;
     }
-    accept = true;
+    accept = c == '>' || empty(cursor);
+    unyield<char>(cursor); // move back over '>'
   }
 
   if (accept) {
     buf[i] = '\0'; // ensure null-terminated
     string *val = new string(buf);
     dest.set(val);
-    accept = accept && (input.empty() || input.peek<char>() == '>');
+    accept = accept && (empty(cursor) || peek<char>(cursor) == '>');
   }
   if (accept) {
-    input.commit();
+    commit(cursor);
   } else {
-    input.rollback();
+    rollback(cursor);
   }
   return accept;
 }

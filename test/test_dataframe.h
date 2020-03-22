@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dataframe.h"
+#include "simple_dataframe.h"
 
 class TestDataFrame : public ::testing::Test {
 public:
@@ -10,7 +10,7 @@ public:
 
   void SetUp() {
     scm = new Schema("ISFB");
-    df = new DataFrame(*scm);
+    df = new SimpleDataFrame(*scm);
     row = new Row(*scm);
   }
 
@@ -20,31 +20,6 @@ public:
     delete scm;
   }
 };
-
-TEST_F(TestDataFrame, test__add_column__ncols) {
-  EXPECT_EQ(scm->width(), 4);
-  EXPECT_EQ(df->ncols(), 4);
-
-  /* adding column, should only affect internal schema */
-  df->add_column(Data::Type::INT, new string("int col"));
-  EXPECT_EQ(scm->width(), 4);             // does not affect external schema
-  EXPECT_EQ(df->get_schema().width(), 5); // affects internals schema
-  /* ensure ncols grows */
-  EXPECT_EQ(df->ncols(), 5);
-
-  string name("apples");
-  df->add_column(Data::Type::BOOL, &name);
-  EXPECT_EQ(df->get_schema().width(), 6); // affects internals schema
-  /* ensure ncols grows again */
-  EXPECT_EQ(df->ncols(), 6);
-
-  /* mutate external name should not affect col_name */
-  name[0] = 'b';
-  /* affects external name */
-  EXPECT_STREQ(name.c_str(), "bpples");
-  /* does not affect internal name */
-  EXPECT_STREQ(df->get_schema().col_name(5)->c_str(), "apples");
-}
 
 TEST_F(TestDataFrame, test__add_row__get__nrows) {
   /* ensure empty */
@@ -58,10 +33,10 @@ TEST_F(TestDataFrame, test__add_row__get__nrows) {
   r.set(3, false);
   df->add_row(r);
   EXPECT_EQ(df->nrows(), 1);
-  EXPECT_EQ(df->get<int>(0, 0), 0);
-  EXPECT_STREQ(df->get<string *>(1, 0)->c_str(), "apples");
-  EXPECT_EQ(df->get<float>(2, 0), 66.2f);
-  EXPECT_EQ(df->get<bool>(3, 0), false);
+  EXPECT_EQ(df->get_int(0, 0), 0);
+  EXPECT_STREQ(df->get_string(0, 1)->c_str(), "apples");
+  EXPECT_EQ(df->get_float(0, 2), 66.2f);
+  EXPECT_EQ(df->get_bool(0, 3), false);
 
   /* ensure length correct */
   EXPECT_EQ(df->nrows(), 1);
@@ -75,10 +50,10 @@ TEST_F(TestDataFrame, test__add_row__get__nrows) {
     df->add_row(r);
   }
   for (int i = 1; i < 1000; i++) {
-    EXPECT_EQ(df->get<int>(0, i), i);
-    EXPECT_STREQ(df->get<string *>(1, i)->c_str(), "apples");
-    EXPECT_EQ(df->get<float>(2, i), i * 3.3f);
-    EXPECT_EQ(df->get<bool>(3, i), i % 3 == 0);
+    EXPECT_EQ(df->get_int(i, 0), i);
+    EXPECT_STREQ(df->get_string(i, 1)->c_str(), "apples");
+    EXPECT_EQ(df->get_float(i, 2), i * 3.3f);
+    EXPECT_EQ(df->get_bool(i, 3), i % 3 == 0);
   }
 
   /* ensure length still correct */
@@ -98,12 +73,12 @@ TEST_F(TestDataFrame, test_set) {
     df->add_row(r);
   }
 
-  EXPECT_EQ(df->get<int>(0, 22), 22);
-  EXPECT_EQ(df->get<float>(2, 22), 22 * 3.3f);
-  df->set<int>(0, 22, 333);
-  df->set<float>(2, 22, 4.7f);
-  EXPECT_EQ(df->get<int>(0, 22), 333);
-  EXPECT_EQ(df->get<float>(2, 22), 4.7f);
+  EXPECT_EQ(df->get_int(22, 0), 22);
+  EXPECT_EQ(df->get_float(22, 2), 22 * 3.3f);
+  df->set(22, 0, 333);
+  df->set(22, 2, 4.7f);
+  EXPECT_EQ(df->get_int(22, 0), 333);
+  EXPECT_EQ(df->get_float(22, 2), 4.7f);
 }
 
 TEST_F(TestDataFrame, test_map) {
@@ -156,8 +131,38 @@ TEST_F(TestDataFrame, test_filter) {
   FilterDiv2 rower;
   DataFrame *results = df->filter(rower);
   EXPECT_EQ(results->nrows(), 50);
-  EXPECT_EQ(results->get<int>(0, 0), 0);
-  EXPECT_EQ(results->get<int>(0, 1), 2);
-  EXPECT_EQ(results->get<int>(0, 2), 4);
+  EXPECT_EQ(results->get_int(0, 0), 0);
+  EXPECT_EQ(results->get_int(1, 0), 2);
+  EXPECT_EQ(results->get_int(2, 0), 4);
   delete results;
+}
+
+TEST_F(TestDataFrame, test_equals) {
+  /* fill df with 100 rows */
+  Row r(df->get_schema());
+  char buf[1024];
+  for (int i = 0; i < 5; i++) {
+    r.set(0, i);
+    sprintf(buf, "hello %d", i);
+    r.set(1, new string(buf));
+    r.set(2, i * 3.3f);
+    r.set(3, i % 3 == 0);
+    df->add_row(r);
+  }
+
+  DataFrame *df2 = new SimpleDataFrame(*scm);
+  for (int i = 0; i < 5; i++) {
+    r.set(0, i);
+    sprintf(buf, "hello %d", i);
+    r.set(1, new string(buf));
+    r.set(2, i * 3.3f);
+    r.set(3, i % 3 == 0);
+    df2->add_row(r);
+  }
+
+  EXPECT_TRUE(df->equals(*df2));
+  df->set(4, 1, new string("333"));
+  EXPECT_FALSE(df->equals(*df2));
+  df2->set(4, 1, new string("333"));
+  EXPECT_TRUE(df2->equals(*df));
 }

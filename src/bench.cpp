@@ -1,5 +1,5 @@
-#include "dataframe.h"
 #include "parser.h"
+#include "simple_dataframe.h"
 #include <chrono>
 #include <iostream>
 
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     Parser parser(length, buf);
     Schema scm;
     parser.infer_schema(scm);
-    DataFrame df(scm);
+    SimpleDataFrame df(scm);
 
     bool success = parser.parse_file(df);
     auto t2 = chrono::high_resolution_clock::now();
@@ -34,6 +34,9 @@ int main(int argc, char **argv) {
       cout << "parse success for " << df.nrows() << " rows" << endl;
     } else {
       cout << "parse fail" << endl;
+    }
+    if (length < 2048) {
+      df.print();
     }
     chrono::duration<double, milli> diff = t2 - t1;
     cout << diff.count() << " ms" << endl;

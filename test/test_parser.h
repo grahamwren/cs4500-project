@@ -1,6 +1,9 @@
+#pragma once
+
 #include "data.h"
 #include "parser.h"
 #include "schema.h"
+#include "simple_dataframe.h"
 
 class TestParser : public ::testing::Test {
 public:
@@ -12,7 +15,7 @@ public:
            "<0><44.5><apples><1><>\n"
            "<1><><oranges><0>\n";
     scm = new Schema("BFSBM");
-    df = new DataFrame(*scm);
+    df = new SimpleDataFrame(*scm);
     Row r(*scm);
     r.set(0, true);
     r.set(1, (float)0);
@@ -53,7 +56,7 @@ TEST_F(TestParser, test__infer_schema) {
 
 TEST_F(TestParser, test__parse_file) {
   Parser p(file);
-  DataFrame n_df(*scm);
+  SimpleDataFrame n_df(*scm);
   p.parse_file(n_df);
   EXPECT_TRUE(n_df.equals(*df));
 }

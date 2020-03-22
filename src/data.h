@@ -26,6 +26,8 @@ public:
       return 'S';
     case Data::Type::MISSING:
       return 'M';
+    default:
+      assert(false);
     }
   }
 
@@ -46,18 +48,7 @@ public:
     assert(false);
   }
 
-  template <typename T> static Data::Type get_type() noexcept {
-    if constexpr (is_same_v<T, int>)
-      return Data::Type::INT;
-    else if constexpr (is_same_v<T, float>)
-      return Data::Type::FLOAT;
-    else if constexpr (is_same_v<T, bool>)
-      return Data::Type::BOOL;
-    else if constexpr (is_same_v<T, string *>)
-      return Data::Type::STRING;
-    else
-      assert(false);
-  }
+  template <typename T> static Data::Type get_type() noexcept { assert(false); }
 
   static Type combine(const Type &left, const Type &right) {
     return left > right ? left : right;
@@ -68,7 +59,14 @@ public:
   Data(float val) : missing(false), data(val) {}
   Data(bool val) : missing(false), data(val) {}
   Data(string *val) : missing(false), data(val) {}
-  Data(Data &d) = default;
+  Data(const Data &d) = default;
+  Data(Data &&d) = default;
+
+  constexpr void operator=(const Data &d) {
+    missing = d.missing;
+    data = d.data;
+  }
+
   bool is_missing() const { return missing; }
 
   template <typename T> T get() const {
@@ -109,3 +107,16 @@ public:
 
   template <typename T> T get() { return data.get<T>(); }
 };
+
+template <> inline Data::Type Data::get_type<int>() noexcept {
+  return Data::Type::INT;
+}
+template <> inline Data::Type Data::get_type<float>() noexcept {
+  return Data::Type::FLOAT;
+}
+template <> inline Data::Type Data::get_type<bool>() noexcept {
+  return Data::Type::BOOL;
+}
+template <> inline Data::Type Data::get_type<string *>() noexcept {
+  return Data::Type::STRING;
+}

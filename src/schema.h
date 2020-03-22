@@ -17,8 +17,14 @@ using namespace std;
  * The valid types are represented by the chars 'S', 'B', 'I' and 'F'.
  */
 class Schema {
+protected:
   vector<Data::Type> types;
-  vector<string *> columns; // column names are external
+  vector<string *> columns; // OWNED
+
+  void add_col_name(const string *s) {
+    string *n_s = s ? new string(*s) : nullptr;
+    columns.push_back(n_s);
+  }
 
 public:
   Schema() = default;
@@ -26,7 +32,11 @@ public:
   /**
    * Copying constructor
    */
-  Schema(const Schema &from) : types(from.types), columns(from.columns) {}
+  Schema(const Schema &from) : types(from.types) {
+    for (int i = 0; i < from.width(); i++) {
+      add_col_name(from.col_name(i));
+    }
+  }
 
   /**
    * Create a schema from a string of types. A string that contains
@@ -39,6 +49,11 @@ public:
     for (int i = 0; i < len; i++) {
       add_column(Data::char_as_type(types_carr[i]), nullptr);
     }
+  }
+
+  ~Schema() {
+    for (int i = 0; i < width(); i++)
+      delete col_name(i);
   }
 
   /**
@@ -55,7 +70,7 @@ public:
    */
   void add_column(Data::Type type, string *name) {
     types.push_back(type);
-    columns.push_back(name);
+    add_col_name(name);
   }
 
   void set_type(int i, Data::Type type) {

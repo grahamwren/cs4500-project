@@ -25,18 +25,16 @@ class BytesWriter;
  * authors: @grahamwren, @jagen31
  */
 class Row {
-  const int _width = 0;
   const Schema &scm;
-  Data *data;
   int idx = 0;
+  vector<Data> data;
 
 public:
   /**
    * Build a row following a schema with a start index.
    */
-  Row(int i, const Schema &scm) : _width(scm.width()), scm(scm), idx(i) {
-    data = new Data[width()];
-  }
+  Row(int i, const Schema &scm) : scm(scm), idx(i), data(scm.width()) {}
+
   /**
    * Build a row following a schema with default start index.
    */
@@ -45,15 +43,12 @@ public:
   /**
    * copy constructor
    */
-  Row(const Row &o) : Row(o.idx, o.scm) {
-    memcpy(data, o.data, width() * sizeof(Data));
-  }
-  ~Row() { delete[] data; }
+  Row(const Row &o) : scm(o.get_schema()), idx(o.get_idx()), data(o.data) {}
 
   /**
    * Number of fields in the row.
    */
-  int width() const { return _width; }
+  int width() const { return scm.width(); }
 
   /**
    * Set/get the index of this row (ie. its position in the _dataframe. This is
@@ -102,44 +97,54 @@ public:
 
   void set(int col, const Data &val) {
     assert(col < width());
+
     data[col] = val;
   }
 
   void set_missing(int col) { data[col].set(); }
 
-  bool equals(const Row *other) const {
-    if (other == nullptr || other->width() != width() ||
-        !scm.equals(other->get_schema())) {
+  bool equals(const Row &other) const {
+    const Schema &schema = get_schema();
+
+    bool accept = true;
+    string *s;
+    string *os;
+    if (schema.equals(other.get_schema())) {
+      for (int x = 0; x < schema.width(); x++) {
+        if (is_missing(x)) {
+          accept = other.is_missing(x);
+        } else {
+          switch (schema.col_type(x)) {
+          case Data::Type::INT:
+            accept = get<int>(x) == other.get<int>(x);
+            break;
+          case Data::Type::FLOAT:
+            accept = get<float>(x) == other.get<float>(x);
+            break;
+          case Data::Type::BOOL:
+            accept = get<bool>(x) == other.get<bool>(x);
+            break;
+          case Data::Type::STRING:
+            s = get<string *>(x);
+            os = other.get<string *>(x);
+            accept = s == nullptr || os == nullptr
+                         ? s == os
+                         : s->compare(*other.get<string *>(x)) == 0;
+            break;
+          case Data::Type::MISSING:
+            accept = true;
+            break;
+          default:
+            assert(false);
+          }
+        }
+        if (!accept)
+          return false;
+      }
+      return true;
+    } else {
       return false;
     }
-
-    for (int i = 0; i < width(); ++i) {
-      char type = scm.col_type(i);
-      if (is_missing(i) && other->is_missing(i)) {
-        continue;
-      } else if (is_missing(i) || other->is_missing(i)) {
-        return false;
-      } else if (type == 'B') {
-        if (get<bool>(i) != other->get<bool>(i))
-          return false;
-      } else if (type == 'I') {
-        if (get<int>(i) != other->get<int>(i))
-          return false;
-      } else if (type == 'F') {
-        if (get<float>(i) != other->get<float>(i))
-          return false;
-      } else if (type == 'S') {
-        string *s = get<string *>(i);
-        string *other_s = other->get<string *>(i);
-        if (s == nullptr || other_s == nullptr)
-          return s == other_s;
-        else {
-          return s->compare(*other_s) == 0;
-        }
-      }
-    }
-
-    return true;
   }
 
   void pack(BytesWriter &writer) const {
@@ -258,7 +263,7 @@ public:
     return row;
   }
 
-  void print(bool with_meta) const {
+  void print(bool with_meta = false) const {
     if (with_meta) {
       cout << "Row<" << this << ">(scm: '";
       for (int i = 0; i < width(); i++) {
@@ -275,6 +280,7 @@ public:
           cout << get<int>(i);
           break;
         case 'F':
+          cout << fixed;
           cout << get<float>(i);
           break;
         case 'B':
@@ -282,7 +288,6 @@ public:
           break;
         case 'S':
           string *s = get<string *>(i);
-          cout << "string: " << (void *)s << " " << flush;
           assert(s);
           cout << '"' << get<string *>(i)->c_str() << '"';
           break;

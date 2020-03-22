@@ -1,11 +1,13 @@
 #pragma once
 
-#include "bytes_reader.h"
+#include "cursor.h"
 #include "data.h"
 #include <cassert>
+#include <charconv>
 #include <cstring>
 #include <inttypes.h>
 #include <iostream>
+#include <utility>
 
 #ifndef MAX_VAL_LEN
 #define MAX_VAL_LEN 1024
@@ -19,13 +21,13 @@ class Row;
 
 class Parser {
 public:
-  BytesReader input;
+  Cursor cursor;
   bool debug = false;
 
   Parser(int len, char *d);
   Parser(const char *d);
 
-  bool empty() const;
+  bool out_of_input() const;
   int parse_pos() const;
 
   bool parse_file(DataFrame &dest);

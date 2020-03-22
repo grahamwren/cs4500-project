@@ -1,5 +1,5 @@
 DEBUG=true
-CC=g++
+CC=clang++
 FAST_CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare 
 DEBUG_CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall
 

@@ -51,7 +51,7 @@ protected:
     for (int i = 0; i < len; ++i) {
       Data::Type type = schema.col_type(i);
       const Column &col = *columns[i];
-      if (col.is_missing(i))
+      if (col.is_missing(idx))
         row.set_missing(i);
       else {
         switch (type) {

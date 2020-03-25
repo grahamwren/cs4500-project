@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 2.8.2)
+cmake_policy(SET CMP0048 NEW)
 
 # specify the C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+
+project(EAU2 VERSION 0.1.0)
 
 find_package(Threads REQUIRED)
 

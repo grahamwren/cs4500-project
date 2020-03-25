@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "test_column.h"
+#include "test_cursor.h"
 #include "test_data.h"
 #include "test_dataframe.h"
 #include "test_dataframe_chunk.h"

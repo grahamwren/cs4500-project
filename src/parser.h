@@ -21,7 +21,7 @@ class Row;
 
 class Parser {
 public:
-  Cursor cursor;
+  ReadCursor cursor;
   bool debug = false;
 
   Parser(int len, char *d);

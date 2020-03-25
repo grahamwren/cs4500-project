@@ -58,8 +58,6 @@ public:
       }
       delete resp;
     }
-    // process done
-    exit(0);
   }
 
   void setup() {

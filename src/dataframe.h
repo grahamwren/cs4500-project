@@ -20,10 +20,9 @@ using namespace std;
  * authors: @grahamwren, jagen31
  */
 class DataFrame {
-protected:
-  virtual void fill_row(int, Row &) const = 0;
 
 public:
+
   virtual ~DataFrame() {}
   /**
    * Returns the dataframe's schema. Modifying the schema after a dataframe
@@ -36,6 +35,8 @@ public:
    * the right schema and be filled with values, otherwise undefined.
    */
   virtual void add_row(const Row &row) = 0;
+
+  virtual void fill_row(int, Row &) const = 0;
 
   /**
    * Set the value at the given column and row to the given value.

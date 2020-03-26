@@ -20,3 +20,15 @@ public:
 };
 
 TEST_F(TestRow, test_width) { EXPECT_EQ(row->width(), 4); }
+
+TEST_F(TestRow, test_pack_unpack) {
+  WriteCursor wc;
+  row->pack(wc);
+  ReadCursor rc(wc.length(), wc.bytes());
+  Row *r2 = Row::unpack(rc);
+
+  EXPECT_EQ(row->get<int>(0), r2->get<int>(0));
+  EXPECT_EQ(row->get<float>(1), r2->get<float>(1));
+  EXPECT_STREQ(row->get<string *>(2)->c_str(), r2->get<string *>(2)->c_str());
+  EXPECT_EQ(row->get<bool>(3), r2->get<bool>(3));
+}

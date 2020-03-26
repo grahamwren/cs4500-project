@@ -319,30 +319,27 @@ bool Parser::parse_float(Data &dest) {
 bool Parser::parse_string(Data &dest) {
   checkpoint(cursor);
 
+  char *start = reinterpret_cast<char *>(cursor.cursor);
   int i = 0;
-  char buf[MAX_VAL_LEN];
-  bool accept;
   /* check for quoted string */
   if (expect<char>(cursor, '"')) {
-    char c;
-    while (has_next(cursor) && (c = yield<char>(cursor)) != '"') {
-      buf[i++] = c;
+    while (has_next(cursor) && yield<char>(cursor) != '"') {
+      i++;
     }
-    accept = c == '"' && (peek<char>(cursor) == '>' || empty(cursor));
   } else {
-    char c;
-    while (has_next(cursor) && (c = yield<char>(cursor)) != '>') {
-      buf[i++] = c;
+    while (has_next(cursor) && yield<char>(cursor) != '>') {
+      i++;
     }
-    accept = c == '>' || empty(cursor);
-    unyield<char>(cursor); // move back over '>'
+    // if we stopped because we found a '>'
+    if (has_next(cursor)) {
+      unyield<char>(cursor); // move back over '>'
+    }
   }
 
+  bool accept = i > 0 && (empty(cursor) || peek<char>(cursor) == '>');
   if (accept) {
-    buf[i] = '\0'; // ensure null-terminated
-    string *val = new string(buf);
+    string *val = new string(start, i);
     dest.set(val);
-    accept = accept && (empty(cursor) || peek<char>(cursor) == '>');
   }
   if (accept) {
     commit(cursor);

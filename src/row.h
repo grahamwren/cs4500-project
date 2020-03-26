@@ -1,7 +1,5 @@
 #pragma once
 
-#include "bytes_reader.h"
-#include "bytes_writer.h"
 #include "data.h"
 #include "schema.h"
 #include <cassert>
@@ -10,10 +8,6 @@
 #include <stdlib.h>
 
 using namespace std;
-
-class Schema;
-class BytesReader;
-class BytesWriter;
 
 /*************************************************************************
  * Row::
@@ -147,29 +141,36 @@ public:
     }
   }
 
-  void pack(BytesWriter &writer) const {
-    writer.pack('R');
-    writer.pack(idx);
-    writer.pack((int)width());
+  void pack(WriteCursor &c) const {
+    ::pack(c, 'R');
+    ::pack(c, idx);
     char types[scm.width() + 1];
     scm.c_str(types);
-    writer.pack(types);
+    ::pack(c, sized_ptr(scm.width(), types));
+    pack_data(c);
+  }
+
+  void pack_data(WriteCursor &c) const {
     for (int i = 0; i < width(); i++) {
-      switch (types[i]) {
-      case 'I': {
-        writer.pack(get<int>(i));
+      switch (scm.col_type(i)) {
+      case Data::Type::INT: {
+        ::pack(c, get<int>(i));
         break;
       }
-      case 'B': {
-        writer.pack(get<bool>(i));
+      case Data::Type::BOOL: {
+        ::pack(c, get<bool>(i));
         break;
       }
-      case 'F': {
-        writer.pack(get<float>(i));
+      case Data::Type::FLOAT: {
+        ::pack(c, get<float>(i));
         break;
       }
-      case 'S': {
-        writer.pack(get<string *>(i));
+      case Data::Type::STRING: {
+        string *s = get<string *>(i);
+        if (s)
+          ::pack(c, sized_ptr(s->size(), s->c_str()));
+        else
+          ::pack(c, sized_ptr<char>(0, 0));
         break;
       }
       default:
@@ -181,86 +182,70 @@ public:
   /**
    * allocates a Row based on the next bytes in the reader
    */
-  static Row *unpack(const Schema &scm, BytesReader &reader) {
-    assert(reader.yield<char>() == 'R');
-    int idx = reader.yield<int>();
-    int width = reader.yield<int>();
+  static Row *unpack(const Schema &scm, ReadCursor &c) {
+    char tag = yield<char>(c);
+    assert(tag == 'R');
+    int idx = yield<int>(c);
 
     /* collect types for schema */
-    char types[width + 1];
-    reader.yield_c_arr(types);
+    sized_ptr<char> types = yield<sized_ptr<char>>(c);
 
     /* assert unpacking correct schema */
-    assert(scm.width() == width);
-    for (int i = 0; i < width; i++) {
+    assert(scm.width() == types.len);
+    for (int i = 0; i < types.len; i++) {
       assert(Data::char_as_type(types[i]) == scm.col_type(i));
     }
 
     Row *row = new Row(idx, scm);
-
-    /* collect data based on schema */
-    for (int i = 0; i < width; ++i) {
-      switch (types[i]) {
-      case 'B': {
-        row->set(i, reader.yield<bool>());
-        break;
-      }
-      case 'I': {
-        row->set(i, reader.yield<int>());
-        break;
-      }
-      case 'F': {
-        row->set(i, reader.yield<float>());
-        break;
-      }
-      case 'S': {
-        // TODO: Not clear who owns this allocated string
-        row->set(i, reader.yield_string_ptr());
-        break;
-      }
-      default:
-        assert(false); // unknown type in row
-      }
-    }
+    unpack_data(c, *row);
     return row;
   }
 
-  static Row *unpack(BytesReader &reader) {
-    assert(reader.yield<char>() == 'R');
-    int idx = reader.yield<int>();
-    int width = reader.yield<int>();
+  /**
+   * allocates a Row based on the next bytes in the reader
+   */
+  static Row *unpack(ReadCursor &c) {
+    char tag = yield<char>(c);
+    assert(tag == 'R');
+    int idx = yield<int>(c);
 
     /* collect types for schema */
-    char types[width + 1];
-    reader.yield_c_arr(types);
-    Schema *scm = new Schema(types);
+    sized_ptr<char> types = yield<sized_ptr<char>>(c);
+    char buf[types.len + 1];
+    types.fill(buf);
+    Schema *scm = new Schema(buf);
     Row *row = new Row(idx, *scm);
+    unpack_data(c, *row);
+    return row;
+  }
 
+  static void unpack_data(ReadCursor &c, Row &dest) {
+    const Schema &scm = dest.get_schema();
     /* collect data based on schema */
-    for (int i = 0; i < width; ++i) {
-      switch (scm->col_type(i)) {
+    for (int i = 0; i < scm.width(); ++i) {
+      switch (scm.col_type(i)) {
       case Data::Type::BOOL: {
-        row->set(i, reader.yield<bool>());
+        dest.set(i, yield<bool>(c));
         break;
       }
       case Data::Type::INT: {
-        row->set(i, reader.yield<int>());
+        dest.set(i, yield<int>(c));
         break;
       }
       case Data::Type::FLOAT: {
-        row->set(i, reader.yield<float>());
+        dest.set(i, yield<float>(c));
         break;
       }
       case Data::Type::STRING: {
-        // TODO: Not clear who owns this allocated string
-        row->set(i, reader.yield_string_ptr());
+        sized_ptr<char> ptr = yield<sized_ptr<char>>(c);
+        string *s = new string(ptr.ptr, ptr.len);
+        dest.set(i, s);
         break;
       }
       default:
         assert(false); // unknown type in row
       }
     }
-    return row;
   }
 
   void print(bool with_meta = false) const {

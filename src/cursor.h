@@ -29,18 +29,22 @@ public:
 };
 
 template <typename T> inline T yield(ReadCursor &c) {
-  static_assert(std::is_trivially_copyable_v<T>,
+  static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
   T const *type_cursor = reinterpret_cast<T const *>(c.cursor);
   c.cursor += sizeof(T);
   return type_cursor[0];
 }
 
-template <> inline sized_ptr<const char> yield(ReadCursor &c) {
+template <> inline sized_ptr<char> yield(ReadCursor &c) {
   int len = yield<int>(c);
-  char const *start_ptr = reinterpret_cast<char const *>(c.cursor);
+  char *start_ptr = reinterpret_cast<char *>(c.cursor);
   c.cursor += len * sizeof(char);
   return sized_ptr(len, start_ptr);
+}
+
+template <> inline sized_ptr<const char> yield(ReadCursor &c) {
+  return yield<sized_ptr<char>>(c);
 }
 
 template <> inline std::string yield(ReadCursor &c) {
@@ -51,26 +55,26 @@ template <> inline std::string yield(ReadCursor &c) {
 }
 
 template <typename T> inline void unyield(ReadCursor &c) {
-  static_assert(std::is_trivially_copyable_v<T>,
+  static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
   c.cursor -= sizeof(T);
 }
 
 template <typename T> inline T peek(const ReadCursor &c) {
-  static_assert(std::is_trivially_copyable_v<T>,
+  static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
   T const *type_cursor = reinterpret_cast<T const *>(c.cursor);
   return type_cursor[0];
 }
 
 template <typename T> inline bool is_next(const ReadCursor &c, T val) {
-  static_assert(std::is_trivially_copyable_v<T>,
+  static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
   return memcmp(c.cursor, &val, sizeof(T)) == 0;
 }
 
 template <typename T> inline bool expect(ReadCursor &c, T val) {
-  static_assert(std::is_trivially_copyable_v<T>,
+  static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
   if (is_next<T>(c, val)) {
     c.cursor += sizeof(T);
@@ -98,6 +102,7 @@ private:
   }
 
 public:
+  WriteCursor() = default;
   WriteCursor(int len) { ensure_space(len); }
 
   /**
@@ -115,7 +120,7 @@ public:
   }
 
   template <typename T> void write(T item) {
-    static_assert(std::is_trivially_copyable_v<T>,
+    static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                   "Type must be trivially copyable");
     uint8_t *item_ptr = reinterpret_cast<uint8_t *>(&item);
     data.insert(data.end(), item_ptr, item_ptr + sizeof(T));
@@ -136,6 +141,10 @@ template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {
   for (int i = 0; i < ptr.len; i++) {
     c.write(ptr[i]);
   }
+}
+
+template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
+  pack(c, (sized_ptr<const char>)ptr);
 }
 
 template <> inline void pack(WriteCursor &c, std::string &val) {

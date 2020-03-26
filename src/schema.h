@@ -38,6 +38,34 @@ public:
     }
   }
 
+  Schema(Schema &&scm) : types(scm.types) {
+    for (int i = 0; i < scm.columns.size(); i++) {
+      columns.push_back(scm.columns[i]);
+      scm.columns[i] = nullptr;
+    }
+  }
+
+  /**
+   * move assignment operator
+   */
+  Schema &operator=(Schema &&scm) {
+    if (this == &scm)
+      return *this;
+
+    types = scm.types;
+    /* delete all of our column names */
+    while (columns.size()) {
+      delete columns.back();
+      columns.pop_back();
+    }
+    /* get and clear all the column names from scm */
+    for (int i = 0; i < scm.columns.size(); i++) {
+      columns.push_back(scm.columns[i]);
+      scm.columns[i] = nullptr;
+    }
+    return *this;
+  }
+
   /**
    * Create a schema from a string of types. A string that contains
    * characters other than those identifying the four type results in

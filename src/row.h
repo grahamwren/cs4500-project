@@ -19,11 +19,40 @@ using namespace std;
  * authors: @grahamwren, @jagen31
  */
 class Row {
-  const Schema &scm;
+  const Schema scm;
   int idx = 0;
   vector<Data> data;
 
 public:
+  static void unpack_data(ReadCursor &c, Row &dest) {
+    const Schema &scm = dest.get_schema();
+    /* collect data based on schema */
+    for (int i = 0; i < scm.width(); ++i) {
+      switch (scm.col_type(i)) {
+      case Data::Type::BOOL: {
+        dest.set(i, yield<bool>(c));
+        break;
+      }
+      case Data::Type::INT: {
+        dest.set(i, yield<int>(c));
+        break;
+      }
+      case Data::Type::FLOAT: {
+        dest.set(i, yield<float>(c));
+        break;
+      }
+      case Data::Type::STRING: {
+        sized_ptr<char> ptr = yield<sized_ptr<char>>(c);
+        string *s = new string(ptr.ptr, ptr.len);
+        dest.set(i, s);
+        break;
+      }
+      default:
+        assert(false); // unknown type in row
+      }
+    }
+  }
+
   /**
    * Build a row following a schema with a start index.
    */
@@ -38,6 +67,30 @@ public:
    * copy constructor
    */
   Row(const Row &o) : scm(o.get_schema()), idx(o.get_idx()), data(o.data) {}
+
+  /**
+   * unpack a [idx, data...] representation of a Row
+   */
+  Row(const Schema &s, ReadCursor &c)
+      : scm(s), idx(yield<int>(c)), data(s.width()) {
+    unpack_data(c, *this);
+  }
+
+  /**
+   * unpack a [idx, schema..., data...] representation of a Row
+   */
+  Row(ReadCursor &c) : idx(yield<int>(c)) {
+    Schema &schema = const_cast<Schema &>(scm); // borrow our schema as mutable
+
+    sized_ptr<char> types = yield<sized_ptr<char>>(c);
+    char buf[types.len + 1];
+    types.fill(buf);
+    schema = Schema(buf); // move
+
+    data.resize(schema.width()); // init enough elements to hold row
+
+    unpack_data(c, *this);
+  }
 
   /**
    * Number of fields in the row.
@@ -141,12 +194,16 @@ public:
     }
   }
 
-  void pack(WriteCursor &c) const {
-    ::pack(c, 'R');
-    ::pack(c, idx);
+  void pack_idx_scm_data(WriteCursor &c) const {
+    pack(c, idx);
     char types[scm.width() + 1];
     scm.c_str(types);
-    ::pack(c, sized_ptr(scm.width(), types));
+    pack(c, sized_ptr(scm.width(), types));
+    pack_data(c);
+  }
+
+  void pack_idx_data(WriteCursor &c) const {
+    pack(c, idx);
     pack_data(c);
   }
 
@@ -154,96 +211,27 @@ public:
     for (int i = 0; i < width(); i++) {
       switch (scm.col_type(i)) {
       case Data::Type::INT: {
-        ::pack(c, get<int>(i));
+        pack(c, get<int>(i));
         break;
       }
       case Data::Type::BOOL: {
-        ::pack(c, get<bool>(i));
+        pack(c, get<bool>(i));
         break;
       }
       case Data::Type::FLOAT: {
-        ::pack(c, get<float>(i));
+        pack(c, get<float>(i));
         break;
       }
       case Data::Type::STRING: {
         string *s = get<string *>(i);
         if (s)
-          ::pack(c, sized_ptr(s->size(), s->c_str()));
+          pack(c, sized_ptr(s->size(), s->c_str()));
         else
-          ::pack(c, sized_ptr<char>(0, 0));
+          pack(c, sized_ptr<char>(0, 0));
         break;
       }
       default:
         assert(false); // unknown type
-      }
-    }
-  }
-
-  /**
-   * allocates a Row based on the next bytes in the reader
-   */
-  static Row *unpack(const Schema &scm, ReadCursor &c) {
-    char tag = yield<char>(c);
-    assert(tag == 'R');
-    int idx = yield<int>(c);
-
-    /* collect types for schema */
-    sized_ptr<char> types = yield<sized_ptr<char>>(c);
-
-    /* assert unpacking correct schema */
-    assert(scm.width() == types.len);
-    for (int i = 0; i < types.len; i++) {
-      assert(Data::char_as_type(types[i]) == scm.col_type(i));
-    }
-
-    Row *row = new Row(idx, scm);
-    unpack_data(c, *row);
-    return row;
-  }
-
-  /**
-   * allocates a Row based on the next bytes in the reader
-   */
-  static Row *unpack(ReadCursor &c) {
-    char tag = yield<char>(c);
-    assert(tag == 'R');
-    int idx = yield<int>(c);
-
-    /* collect types for schema */
-    sized_ptr<char> types = yield<sized_ptr<char>>(c);
-    char buf[types.len + 1];
-    types.fill(buf);
-    Schema *scm = new Schema(buf);
-    Row *row = new Row(idx, *scm);
-    unpack_data(c, *row);
-    return row;
-  }
-
-  static void unpack_data(ReadCursor &c, Row &dest) {
-    const Schema &scm = dest.get_schema();
-    /* collect data based on schema */
-    for (int i = 0; i < scm.width(); ++i) {
-      switch (scm.col_type(i)) {
-      case Data::Type::BOOL: {
-        dest.set(i, yield<bool>(c));
-        break;
-      }
-      case Data::Type::INT: {
-        dest.set(i, yield<int>(c));
-        break;
-      }
-      case Data::Type::FLOAT: {
-        dest.set(i, yield<float>(c));
-        break;
-      }
-      case Data::Type::STRING: {
-        sized_ptr<char> ptr = yield<sized_ptr<char>>(c);
-        string *s = new string(ptr.ptr, ptr.len);
-        dest.set(i, s);
-        break;
-      }
-      default:
-        assert(false); // unknown type in row
       }
     }
   }

@@ -6,10 +6,7 @@ Done by [@grahamwren](https://github.com/grahamwren) and
 EAU2 is a system for distributing data over a network and running computations
 in parallel over that data. EAU2 uses a distributed key value store to manage
 multiple dataframes which may be larger than memory and communication over
-TCP/IP to orchestrate parallel computations over those dataframes. Dataframes
-in EAU2 are read-only, making it easy to run applications in parallel over the
-same set of data.
-
+TCP/IP to orchestrate parallel computations over those dataframes.
 # Architecture
 
 EAU2 has three layers. The **Application** layer is where programs are written
@@ -25,29 +22,29 @@ to find the parts it does not own (see Implementation for more).
 
 ![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-assignment_1-part2/raw/master/diagram.png)
 
-The Application class represents an operation that makes use of a KV to
-manipulate dataframes. The KV class utilizes the network to manage dataframes.
-Each KV owns a list of dataframes, and knows about the dataframes owned by
-other KVs, through `ownership_mapping`. Each KV has potentially several
-chunks of dataframes, stored contiguously in memory via `PartialDataFrame`.
-`DataFrameChunk` is where the data is actually stored.
+The Application class represents an operation that makes use of the KV store to
+manipulate dataframes. Applications access the KV through a KDStore, the "D"
+being short for `DataFrame`.  The KV class utilizes the network to manage blobs
+of serialized data.  A KV on a node owns a number of blobs, and knows about the
+blobs owned by other KVs, through `ownership_mapping`. Each KV has
+potentially several chunks of each blob.
 
-When `put` is called with a new key, the KV adds itself to the ownership map
-and broadcasts the new map to the other nodes in the network. The buffer
-passed into `put` is converted into rows one chunk at a time. The chunks are
-distributed over nodes in the network in a round-robin fashion. That is, nodes
-have a fixed order and chunks are distributed by traversing them as a ring,
-starting at the node where the put request was made.
+When `put` is called with a new key, the KV adds the new mapping to its
+ownership map and broadcasts a corresponding message to the other nodes in the
+network. The data passed into `put` is converted into rows one chunk at a
+time. The chunks are distributed over nodes in the network in a round-robin
+fashion. That is, nodes have a fixed order and chunks are distributed by
+traversing them as a ring, starting at the node where the put request was made.
 
 The `DataFrame` object itself is a virtual dataframe, that is, it delegates
 to the KV in order to perform its operations.
 
-A computation is run on a dataframe by calling `map` with a `Rower`, either on a
-`DataFrame` object, or on a KV by providing the dataframe's key. The KV runs
-the computation on the chunks contained in the current node, while using the
-network to ask for the results of the computation run on chunks stored in other
-nodes. The computation runs in parallel, so rows are likely processed out of
-order. The results, however, are joined in order.
+A computation is run on a dataframe by calling `map` with a `Rower`, either on
+a `DataFrame` object, or on a KDStore by providing the dataframe's key. The
+`DataFrame` runs the computation on the chunks contained in the current node,
+while using the network to ask for the results of the computation run on chunks
+stored in other nodes. The computation runs in parallel, so rows are likely
+processed out of order. The results, however, are joined in order.
 
 A fixed set of `Rower`s have to be defined at compile time, along with a
 serialization/deserialization method for them. This is because the Rowers must
@@ -56,7 +53,9 @@ system.
 
 A `Node` is the low-level interface to the networking layer. The node will
 handle network commands automatically, and takes a callback for handling
-application commands. The callback, set through `set_data_handler` by the KV, will be used by the KV to asynchronously handle Application level requests made of this Node by other Nodes in the cluster.
+application commands. The callback, set through `set_data_handler` by the KV,
+will be used by the KV to asynchronously handle Application level requests made
+of this Node by other Nodes in the cluster.
 
 # Use cases
 

@@ -21,13 +21,13 @@ template <typename E> struct sized_ptr {
     buf[len] = '\0';
   }
 
-  operator sized_ptr<const E>() { return sized_ptr<const E>(len, ptr); }
+  operator sized_ptr<const E>() const { return sized_ptr<const E>(len, ptr); }
   operator std::tuple<int &, E *&>() { return {len, ptr}; }
-  E &operator[](int i) {
+  E &operator[](int i) const {
     assert(i < len);
     return ptr[i];
   }
-  E &operator*() {
+  E &operator*() const {
     assert(len > 0);
     return *ptr;
   }

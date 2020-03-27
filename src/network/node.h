@@ -1,12 +1,14 @@
 #pragma once
 
-#include "../thread.h"
-#include "command.h"
+#include "cursor.h"
 #include "packet.h"
+#include "sized_ptr.h"
 #include "sock.h"
+#include "thread.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <shared_mutex>
 #include <vector>
 
 using namespace std;
@@ -17,69 +19,50 @@ using namespace std;
  * authors: @grahamwren @jagen31
  */
 class Node : public Thread {
-public:
+protected:
   std::atomic<bool> should_continue;
   const IpV4Addr my_addr;
-  const IpV4Addr server_addr;
   ListenSock listen_s;
+  shared_mutex peers_mtx;
   vector<IpV4Addr> peers;
-
-  Node(IpV4Addr a)
-      : should_continue(true), my_addr(a), server_addr(0), listen_s(a) {}
-  Node(IpV4Addr a, IpV4Addr server_a)
-      : should_continue(true), my_addr(a), server_addr(server_a), listen_s(a) {
-    peers.push_back(server_a);
-  }
+  function<bool(ReadCursor &)> data_handler;
 
   void run() {
-    setup();
     while (should_continue) {
-      cout << "Current peers: [";
-      for (int i = 0; i < peers.size(); i++) {
-        cout << peers[i] << ", ";
-      }
-      cout << "]" << endl;
-
+      cout << "waiting for packet..." << endl;
       const DataSock ds = listen_s.accept_connection();
       const Packet pkt = ds.get_pkt();
       cout << "Async: received packet: " << pkt << endl;
       handle_pkt(ds, pkt);
+      check_if_new_peer(pkt.hdr.src_addr);
     }
   }
 
-  void teardown() {
-    for (int i = 0; i < peers.size(); i++) {
-      Packet kill_pkt(my_addr, peers[i], PacketType::SHUTDOWN);
-      Packet resp = DataSock::fetch(kill_pkt);
-      cout << "KILL Response: " << resp << endl;
-      if (resp.hdr.type != PacketType::OK) {
-        cout << "ERROR: failed to shutdown peer: " << peers[i] << endl;
-      }
-    }
-  }
+  bool check_if_new_peer(const IpV4Addr &ip) {
+    /* acquire write lock */
+    unique_lock lock(peers_mtx);
 
-  void setup() {
-    while (listen_s.listen() == -1) {
-      cout << "failed" << endl;
-      sleep(100);
-    }
+    /* if not me and not in peers list */
+    if (ip != my_addr && find(peers.begin(), peers.end(), ip) == peers.end()) {
+      peers.emplace_back(ip);
 
-    // if has a server_addr, register with server
-    if (server_addr != 0) {
-      Packet req(my_addr, server_addr, PacketType::REGISTER);
-      Packet resp = DataSock::fetch(req);
-      cout << "REG Response: " << resp << endl;
-      if (resp.hdr.type != PacketType::OK) {
-        cout << "ERROR: Register req from " << my_addr << " to " << server_addr
-             << " failed with " << resp.hdr.type << endl;
+      cout << "New peer(" << ip << ") ";
+      print_peers();
+
+      /* notify peers of new peer */
+      for (auto peer : peers) {
+        /* skip new peer */
+        if (peer == ip)
+          continue;
+
+        Packet req(my_addr, peer, PacketType::NEW_PEER, sizeof(IpV4Addr),
+                   (uint8_t *)&ip);
+        const Packet resp = DataSock::fetch(req);
+        assert(resp.hdr.type == PacketType::OK);
       }
-      IpV4Addr *ips = (IpV4Addr *)resp.data;
-      int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
-      peers.reserve(peers.size() + n_addrs);
-      for (int i = 0; i < n_addrs; i++) {
-        peers.push_back(ips[i]);
-      }
+      return true;
     }
+    return false;
   }
 
   void handle_pkt(const DataSock &sock, const Packet &pkt) {
@@ -105,53 +88,42 @@ public:
   }
 
   void handle_register_pkt(const DataSock &sock, const Packet &req) {
+    shared_lock lock(peers_mtx);
     const IpV4Addr &src = req.hdr.src_addr;
-    int n_peers = peers.size();
+    const int n_peers = peers.size();
     IpV4Addr ips[n_peers];
     for (int i = 0; i < n_peers; i++) {
       ips[i] = peers[i];
     }
     Packet resp(my_addr, src, PacketType::OK, sizeof(IpV4Addr) * n_peers,
-                (unsigned char *)ips);
+                (uint8_t *)ips);
     sock.send_pkt(resp);
-
-    auto it = find(peers.begin(), peers.end(), src);
-    /* if not found in peers list */
-    if (it == peers.end()) {
-      /* notify peers of new peer */
-      for (int i = 0; i < n_peers; i++) {
-        IpV4Addr &peer_a = peers[i];
-        Packet new_peer_req(my_addr, peer_a, PacketType::NEW_PEER,
-                            sizeof(IpV4Addr), (unsigned char *)&src);
-        Packet new_peer_resp = DataSock::fetch(new_peer_req);
-        cout << "NEW_PEER Response: " << new_peer_resp << endl;
-        if (new_peer_resp.hdr.type != PacketType::OK) {
-          cout << "ERROR: New peer req from " << my_addr << " to " << peer_a
-               << " failed with " << new_peer_resp.hdr.type << endl;
-        }
-      }
-      /* add new peer to peers list */
-      peers.push_back(const_cast<IpV4Addr &>(src));
-    }
   }
 
   void handle_new_peer_pkt(const DataSock &sock, const Packet &req) {
+    unique_lock lock(peers_mtx);
     /* assume data is an IpV4Addr */
-    assert(req.data);
+    assert(req.data.ptr);
     assert(req.hdr.data_len() == sizeof(IpV4Addr));
-    IpV4Addr &a = *(IpV4Addr *)req.data;
+
+    Packet resp(my_addr, req.hdr.src_addr, PacketType::OK);
+    sock.send_pkt(resp);
+
+    const IpV4Addr &a = *(IpV4Addr *)req.data.ptr;
     auto it = find(peers.begin(), peers.end(), a);
     /* if not found in peers list */
     if (it == peers.end()) {
-      peers.push_back(a);
+      /* add peer */
+      peers.emplace_back(a);
+
       /* say hello */
       Packet hello_pkt(my_addr, a, PacketType::HELLO);
-      Packet resp = DataSock::fetch(hello_pkt);
+      const Packet resp = DataSock::fetch(hello_pkt);
       cout << "HELLO Response: " << resp << endl;
       assert(resp.hdr.type == PacketType::OK);
+    } else {
+      cout << "Already seen peer: " << a << endl;
     }
-    Packet resp(my_addr, req.hdr.src_addr, PacketType::OK);
-    sock.send_pkt(resp);
   }
 
   void handle_shutdown_pkt(const DataSock &sock, const Packet &req) {
@@ -160,18 +132,92 @@ public:
     should_continue = false;
   }
 
-  void handle_hello_pkt(const DataSock &sock, const Packet &req) {
+  void handle_hello_pkt(const DataSock &sock, const Packet &req) const {
     Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(ok_resp);
   }
 
-  void handle_data_pkt(const DataSock &sock, const Packet &pkt) {
-    Command *cmd = new Command(pkt.hdr.data_len(), pkt.data);
-    handle_cmd(cmd);
+  void handle_data_pkt(const DataSock &sock, const Packet &req) const {
+    ReadCursor rc(req.data);
+    if (data_handler(rc)) {
+      Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK);
+      sock.send_pkt(ok_resp);
+    } else {
+      Packet err_resp(my_addr, req.hdr.src_addr, PacketType::ERR);
+      sock.send_pkt(err_resp);
+    }
   }
 
-  /**
-   * method to be overriden by children to handle commands
-   */
-  virtual void handle_cmd(Command *cmd) { delete cmd; }
+  void print_peers() {
+    cout << "Peers[";
+    if (peers.size() > 0)
+      cout << peers[0];
+    for (int i = 1; i < peers.size(); i++)
+      cout << ", " << peers[i];
+    cout << ']' << endl;
+  }
+
+public:
+  Node(IpV4Addr a)
+      : should_continue(true), my_addr(a), listen_s(a),
+        data_handler([](ReadCursor &rc) { return true; }) {
+    listen_s.listen();
+  }
+
+  void set_data_handler(function<bool(ReadCursor &)> handler) {
+    data_handler = handler;
+  }
+
+  const IpV4Addr &addr() { return my_addr; }
+
+  void teardown() {
+    shared_lock lock(peers_mtx);
+    for (int i = 0; i < peers.size(); i++) {
+      Packet kill_pkt(my_addr, peers[i], PacketType::SHUTDOWN);
+      const Packet resp = DataSock::fetch(kill_pkt);
+      cout << "KILL Response: " << resp << endl;
+      if (resp.hdr.type != PacketType::OK) {
+        cout << "ERROR: failed to shutdown peer: " << peers[i] << endl;
+      }
+    }
+    cout << "killed cluster, killing self" << endl;
+
+    Packet kill_pkt(my_addr, my_addr, PacketType::SHUTDOWN);
+    const Packet resp = DataSock::fetch(kill_pkt);
+    cout << "KILL Response: " << resp << endl;
+    if (resp.hdr.type != PacketType::OK) {
+      cout << "ERROR: failed to kill self" << endl;
+    }
+  }
+
+  void register_with(const IpV4Addr &server_a) {
+    unique_lock lock(peers_mtx);
+
+    /* add server_a to peers */
+    peers.emplace_back(server_a);
+
+    /* try to register with server */
+    Packet req(my_addr, server_a, PacketType::REGISTER);
+    const Packet resp = DataSock::fetch(req);
+
+    cout << "REG Response: " << resp << endl;
+    assert(resp.hdr.type == PacketType::OK);
+
+    IpV4Addr *ips = (IpV4Addr *)resp.data.ptr;
+    int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
+    peers.insert(peers.end(), ips, ips + n_addrs);
+    print_peers();
+  }
+
+  const vector<IpV4Addr> &cluster() {
+    shared_lock lock(peers_mtx);
+    return peers;
+  }
+
+  ReadCursor send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data) {
+    Packet req(my_addr, dest, PacketType::DATA, data.len, data.ptr);
+    Packet resp = DataSock::fetch(req);
+    cout << "Recv data resp: " << resp << endl;
+    return ReadCursor(resp.data);
+  }
 };

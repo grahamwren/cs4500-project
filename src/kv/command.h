@@ -41,21 +41,20 @@ public:
     }
   }
 
-  void serialize(BytesWriter &writer) {
-    writer.pack(type);
+  void serialize(WriteCursor &wc) {
+    pack<uint8_t>(wc, type);
     switch (type) {
     case Type::GET:
-      key.serialize(writer);
+      key.serialize(wc);
       break;
     case Type::PUT:
-      key.serialize(writer);
-      data.serialize(writer);
+      key.serialize(wc);
+      data.serialize(wc);
       break;
     case Type::DIRECTORY:
-      writer.pack((int)dir_keys.size());
-      for (auto it = dir_keys.begin(); it != dir_keys.end(); it++) {
-        it->serialize(writer);
-      }
+      pack(wc, (int)dir_keys.size());
+      for (auto ck : dir_keys)
+        ck.serialize(wc);
       break;
     }
   }

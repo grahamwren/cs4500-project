@@ -12,9 +12,13 @@
 /** A Thread wraps the thread operations in the standard library.
  *  author: vitekj@me.com */
 class Thread {
-public:
+protected:
   std::thread thread_;
 
+  /** Subclass responsibility, the body of the run method */
+  virtual void run() { assert(false); }
+
+public:
   /** Starts running the thread, invoked the run() method. */
   void start() {
     thread_ = std::thread([this] { this->run(); });
@@ -30,9 +34,6 @@ public:
   static void sleep(size_t millis) {
     std::this_thread::sleep_for(std::chrono::milliseconds(millis));
   }
-
-  /** Subclass responsibility, the body of the run method */
-  virtual void run() { assert(false); }
 
   // there's a better way to get an CwC value out of a threadid, but this'll do
   // for now

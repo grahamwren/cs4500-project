@@ -20,12 +20,14 @@ public:
   ReadCursor(int len, uint8_t *b)
       : bytes(b), cursor(b), bytes_end(b + len),
         checkpoints(new std::stack<uint8_t *>()) {}
+  ReadCursor(sized_ptr<uint8_t> data) : ReadCursor(data.len, data.ptr) {}
   ReadCursor(ReadCursor &&c)
       : bytes(c.bytes), cursor(c.cursor), bytes_end(c.bytes_end),
         checkpoints(c.checkpoints) {
     c.checkpoints = nullptr;
   }
   ~ReadCursor() { delete checkpoints; }
+  int length() const { return bytes_end - bytes; }
 };
 
 template <typename T> inline T yield(ReadCursor &c) {
@@ -48,10 +50,8 @@ template <> inline sized_ptr<const char> yield(ReadCursor &c) {
 }
 
 template <> inline std::string yield(ReadCursor &c) {
-  int len;
-  char const *start;
-  std::tie(len, start) = yield<sized_ptr<const char>>(c);
-  return std::string(start, len);
+  sized_ptr<const char> sp = yield<sized_ptr<const char>>(c);
+  return std::string(sp.ptr, sp.len);
 }
 
 template <typename T> inline void unyield(ReadCursor &c) {

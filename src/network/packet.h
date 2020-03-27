@@ -123,25 +123,25 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
 class Packet {
 public:
   PacketHeader hdr;        // 20 bytes
-  uint8_t *data = nullptr; // owned
+  sized_ptr<uint8_t> data; // owned
 
   /* explicity delete copy and move constructors to ensure copy-elision */
   Packet(Packet &&) = delete;
   Packet(const Packet &) = delete;
 
   // build on receive
-  Packet(PacketHeader const &h) : hdr(h) {}
+  Packet(PacketHeader const &h) : hdr(h), data(0, nullptr) {}
   Packet(PacketHeader const &h, uint8_t *src_data)
-      : hdr(h), data(new uint8_t[hdr.data_len()]) {
-    memcpy(data, src_data, hdr.data_len());
+      : hdr(h), data(hdr.data_len(), new uint8_t[hdr.data_len()]) {
+    memcpy(data.ptr, src_data, hdr.data_len());
   }
 
   // build to send
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type, int data_len,
          uint8_t *input)
-      : hdr(src, dst, data_len + sizeof(PacketHeader), type) {
-    data = new uint8_t[hdr.data_len()];
-    memcpy(data, input, hdr.data_len());
+      : hdr(src, dst, data_len + sizeof(PacketHeader), type),
+        data(data_len, new uint8_t[hdr.data_len()]) {
+    memcpy(data.ptr, input, hdr.data_len());
   }
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type, const char *input)
       : Packet(src, dst, type, strlen(input) + 1, (uint8_t *)input) {}
@@ -149,8 +149,9 @@ public:
       : Packet(src, dst, type, 0, nullptr) {}
 
   ~Packet() {
-    delete[] data;
-    data = nullptr;
+    delete[] data.ptr;
+    data.len = 0;
+    data.ptr = nullptr;
   }
 
   /**
@@ -158,7 +159,7 @@ public:
    */
   void pack(uint8_t *buf) const {
     hdr.pack(buf);
-    memcpy(buf + sizeof(PacketHeader), data, hdr.data_len());
+    memcpy(buf + sizeof(PacketHeader), data.ptr, data.len);
   }
 };
 

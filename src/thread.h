@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <thread>
 
 /** A Thread wraps the thread operations in the standard library.
@@ -36,10 +37,10 @@ public:
   // there's a better way to get an CwC value out of a threadid, but this'll do
   // for now
   /** Return the id of the current thread */
-  static string *thread_id() {
+  static std::string *thread_id() {
     std::stringstream buf;
     buf << std::this_thread::get_id();
-    return new string(buf.str());
+    return new std::string(buf.str());
   }
 };
 

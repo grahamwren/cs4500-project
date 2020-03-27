@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstring>
 #include <iostream>
+
+using namespace std;
 
 /**
  * POD class to represent IP addresses
@@ -8,22 +11,22 @@
  */
 class IpV4Addr {
 public:
-  unsigned short part1 : 8;
-  unsigned short part2 : 8;
-  unsigned short part3 : 8;
-  unsigned short part4 : 8;
+  uint_fast8_t part1;
+  uint_fast8_t part2;
+  uint_fast8_t part3;
+  uint_fast8_t part4;
 
-  IpV4Addr(unsigned short p1, unsigned short p2, unsigned short p3,
-           unsigned short p4)
+  IpV4Addr(uint_fast8_t p1, uint_fast8_t p2, uint_fast8_t p3, uint_fast8_t p4)
       : part1(p1), part2(p2), part3(p3), part4(p4) {}
 
   IpV4Addr(const char *addr) {
+    assert(addr);
     unsigned short p1;
     unsigned short p2;
     unsigned short p3;
     unsigned short p4;
-    // assert matches 4 segments
-    assert(sscanf(addr, "%hu.%hu.%hu.%hu", &p1, &p2, &p3, &p4) == 4);
+    int n = sscanf(addr, "%hu.%hu.%hu.%hu", &p1, &p2, &p3, &p4);
+    assert(n == 4);
     part1 = p1;
     part2 = p2;
     part3 = p3;
@@ -31,48 +34,17 @@ public:
   }
 
   /**
-   * convert from an integer representation of this ip
-   */
-  IpV4Addr(int int_ip) {
-    part1 = (int_ip & 0xff000000) >> 12;
-    part2 = (int_ip & 0x00ff0000) >> 8;
-    part3 = (int_ip & 0x0000ff00) >> 4;
-    part4 = (int_ip & 0x000000ff);
-  }
-
-  /**
    * default constructor, value 0
    */
-  IpV4Addr() : IpV4Addr(0) {}
+  IpV4Addr() : IpV4Addr(0, 0, 0, 0) {}
 
-  /**
-   * writes the char* representation of this address into the given buffer,
-   * buf must be at least 17 bytes long, otherwise undefined
-   */
-  void c_str(char *buf) const {
-    sprintf(buf, "%hu.%hu.%hu.%hu", part1, part2, part3, part4);
-  }
+  IpV4Addr(uint32_t i)
+      : IpV4Addr((i & 0xff000000) >> 24, (i & 0x00ff0000) >> 16,
+                 (i & 0x0000ff00) >> 8, i & 0x000000ff) {}
+  IpV4Addr(int i) : IpV4Addr((uint32_t)i) {}
 
-  /**
-   * convert to the integer representation of this ip
-   *
-   * TODO: this should match implementation of inet_aton
-   */
-  operator int() const {
-    int sum = 0;
-    sum += part1 << 12;
-    sum += part2 << 8;
-    sum += part3 << 4;
-    sum += part4;
-    return sum;
-  };
-
-  void print(bool print_meta = true) const {
-    if (print_meta)
-      cout << "IPV4<";
-    cout << part1 << "." << part2 << "." << part3 << "." << part4;
-    if (print_meta)
-      cout << ">";
+  operator uint32_t() const {
+    return (part1 << 24) | (part2 << 16) | (part3 << 8) | part4;
   }
 
   bool equals(const IpV4Addr &o) const {
@@ -96,20 +68,20 @@ public:
   const IpV4Addr dst_addr;    // 4 bytes  │
   const PacketType type;      // 4 bytes ─┴─ 20 bytes
 
-  PacketHeader(PacketHeader &h)
-      : PacketHeader(h.src_addr, h.dst_addr, h.pkt_len, h.type) {}
   PacketHeader(IpV4Addr src, IpV4Addr dst, int packet_len, PacketType t)
       : pkt_len(packet_len), src_addr(src), dst_addr(dst), type(t) {
     /* packet must be at least header sized */
     assert(packet_len >= sizeof(PacketHeader));
     hdr_checksum = this->compute_checksum();
   }
+  PacketHeader(const PacketHeader &h)
+      : PacketHeader(h.src_addr, h.dst_addr, h.pkt_len, h.type) {}
 
   /**
    * reinterprets the passed in input into a PacketHeader
    * does NOT allocate
    */
-  static PacketHeader *parse(unsigned char *input) {
+  static PacketHeader *parse(uint8_t *input) {
     PacketHeader *pkt_hdr = (PacketHeader *)input;
     return pkt_hdr->valid_checksum() ? pkt_hdr : nullptr;
   }
@@ -117,9 +89,7 @@ public:
   /**
    * pack this header into the buffer
    */
-  void pack(unsigned char *buf) const {
-    memcpy(buf, this, sizeof(PacketHeader));
-  }
+  void pack(uint8_t *buf) const { memcpy(buf, this, sizeof(PacketHeader)); }
 
   /**
    * compute the checksum of this header using ip packet checksum algo
@@ -141,45 +111,6 @@ public:
 
   bool valid_checksum() const { return hdr_checksum == compute_checksum(); };
   int data_len() const { return pkt_len - sizeof(PacketHeader); }
-
-  void print() const {
-    cout << "PacketHeader<" << (void *)this << ">(pkt_len: " << pkt_len
-         << ", hdr_checksum: " << hdr_checksum << ", src: ";
-    src_addr.print();
-    cout << ", dst: ";
-    dst_addr.print();
-    cout << ", type: ";
-    PacketHeader::print_type(type);
-    cout << ")";
-  }
-
-  static void print_type(const PacketType &type) {
-    switch (type) {
-    case PacketType::REGISTER:
-      cout << "REGISTER";
-      break;
-    case PacketType::NEW_PEER:
-      cout << "NEW_PEER";
-      break;
-    case PacketType::HELLO:
-      cout << "HELLO";
-      break;
-    case PacketType::OK:
-      cout << "OK";
-      break;
-    case PacketType::ERR:
-      cout << "ERR";
-      break;
-    case PacketType::DATA:
-      cout << "DATA";
-      break;
-    case PacketType::SHUTDOWN:
-      cout << "SHUTDOWN";
-      break;
-    default:
-      cout << "<PacketType unknown>";
-    }
-  }
 };
 
 static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
@@ -191,21 +122,29 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
  */
 class Packet {
 public:
-  PacketHeader hdr;              // 20 bytes
-  unsigned char *data = nullptr; // owned
+  PacketHeader hdr;        // 20 bytes
+  uint8_t *data = nullptr; // owned
+
+  /* explicity delete copy and move constructors to ensure copy-elision */
+  Packet(Packet &&) = delete;
+  Packet(const Packet &) = delete;
 
   // build on receive
-  Packet(PacketHeader &h) : hdr(h) { data = new unsigned char[hdr.data_len()]; }
+  Packet(PacketHeader const &h) : hdr(h) {}
+  Packet(PacketHeader const &h, uint8_t *src_data)
+      : hdr(h), data(new uint8_t[hdr.data_len()]) {
+    memcpy(data, src_data, hdr.data_len());
+  }
 
   // build to send
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type, int data_len,
-         unsigned char *input)
+         uint8_t *input)
       : hdr(src, dst, data_len + sizeof(PacketHeader), type) {
-    data = new unsigned char[hdr.data_len()];
+    data = new uint8_t[hdr.data_len()];
     memcpy(data, input, hdr.data_len());
   }
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type, const char *input)
-      : Packet(src, dst, type, strlen(input) + 1, (unsigned char *)input) {}
+      : Packet(src, dst, type, strlen(input) + 1, (uint8_t *)input) {}
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
       : Packet(src, dst, type, 0, nullptr) {}
 
@@ -217,18 +156,67 @@ public:
   /**
    * write the bytes representation of this Packet into the given buffer
    */
-  void pack(unsigned char *buf) const {
+  void pack(uint8_t *buf) const {
     hdr.pack(buf);
     memcpy(buf + sizeof(PacketHeader), data, hdr.data_len());
   }
-
-  void print() const {
-    cout << "Packet<" << (void *)this << ">(header: ";
-    hdr.print();
-    cout << ", data: [";
-    for (int i = 0; i < hdr.data_len(); i++) {
-      printf("0x%x,", data[i]);
-    }
-    cout << "])";
-  };
 };
+
+ostream &operator<<(ostream &output, const IpV4Addr &ip) {
+  output << (int)ip.part1 << '.' << (int)ip.part2 << '.' << (int)ip.part3 << '.'
+         << (int)ip.part4;
+  return output;
+}
+
+ostream &operator<<(ostream &output, const PacketType type) {
+  switch (type) {
+  case PacketType::REGISTER:
+    output << "REGISTER";
+    break;
+  case PacketType::NEW_PEER:
+    output << "NEW_PEER";
+    break;
+  case PacketType::HELLO:
+    output << "HELLO";
+    break;
+  case PacketType::OK:
+    output << "OK";
+    break;
+  case PacketType::ERR:
+    output << "ERR";
+    break;
+  case PacketType::DATA:
+    output << "DATA";
+    break;
+  case PacketType::SHUTDOWN:
+    output << "SHUTDOWN";
+    break;
+  default:
+    output << "<PacketType unknown>";
+  }
+  return output;
+}
+
+ostream &operator<<(ostream &output, const PacketHeader &hdr) {
+  output << "PacketHeader<" << (void *)&hdr << ">(pkt_len: " << hdr.pkt_len
+         << ", hdr_checksum: " << hdr.hdr_checksum << ", src: " << hdr.src_addr
+         << ", dst: " << hdr.dst_addr << ", type: " << hdr.type << ")";
+  return output;
+}
+
+ostream &operator<<(ostream &output, const Packet &pkt) {
+  output << "Packet<" << (void *)&pkt << ">(header: " << pkt.hdr << ", data: [";
+
+  char bytes_s[6];
+  if (pkt.hdr.data_len() > 0) {
+    sprintf(bytes_s, "0x%x", pkt.data[0]);
+    output << bytes_s;
+  }
+
+  for (int i = 1; i < pkt.hdr.data_len(); i++) {
+    sprintf(bytes_s, ",0x%x", pkt.data[i]);
+    output << bytes_s;
+  }
+  output << "])";
+  return output;
+}

@@ -11,7 +11,7 @@ endif
 
 CPATH=src
 
-SHARED_HEADER_FILES=src/*
+SHARED_HEADER_FILES=src/**/*
 SRC_DIR=src
 BUILD_DIR=build
 
@@ -26,13 +26,16 @@ test: FORCE
 	cd test && make
 
 $(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
-	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
 $(BUILD_DIR)/bench.exe: $(SRC_DIR)/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
-	$(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
-	$(CC) $(CCOPTS) -c $< -o $@
+	CPATH=$(CPATH) $(CC) $(CCOPTS) -c $< -o $@
 
 
 bench: CCOPTS=$(FAST_CCOPTS)
@@ -57,14 +60,39 @@ clean:
 # docker
 CONT_NAME=gwjq-eau2:0.1
 define docker_run
-	docker run -ti -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
+	docker run -ti --network clients-project -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
+endef
+
+define docker_run_detach
+	docker run -tid --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
 docker_valgrind: docker_install
 	$(call docker_run, make clean build)
 	$(call docker_run, make native_valgrind)
 
-docker_install: Dockerfile
+# best to run this as:
+# $ make run_network |
+#     egrep "^\w+$" |
+#     tee cont_hashs.ignore_me &&
+#     cat cont_hashs.ignore_me |
+#     xargs -t -n1 docker logs
+run_network: docker_install
+	$(call docker_run, make clean $(BUILD_DIR)/node_example.exe)
+	$(call docker_run_detach, tcpdump net 172.168.0.0/16, 172.168.0.240)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.2, 172.168.0.2)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.4  --server-ip 172.168.0.3, 172.168.0.4)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.5  --server-ip 172.168.0.4, 172.168.0.5)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.6  --server-ip 172.168.0.5, 172.168.0.6)
+	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.7  --server-ip 172.168.0.6, 172.168.0.7)
+
+docker_install: docker_clean Dockerfile
 	docker build -t $(CONT_NAME) .
+	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
+
+docker_clean: FORCE
+	docker ps | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker kill >/dev/null
+	docker ps -a | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
 
 FORCE:

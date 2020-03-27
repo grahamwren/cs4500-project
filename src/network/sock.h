@@ -2,10 +2,12 @@
 
 #include "packet.h"
 #include <arpa/inet.h>
+#include <cstring>
 #include <iostream>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -20,37 +22,28 @@ using namespace std;
 class Sock {
 protected:
   int sock_fd = -1; // uninitialized value should error
-
 public:
   const IpV4Addr &addr;
   Sock(int socket, const IpV4Addr &a) : sock_fd(socket), addr(a) {}
   Sock(const IpV4Addr &a) : addr(a) {}
-  struct addrinfo *get_addr() {
-    struct addrinfo *address_info = new addrinfo;
-    memset(address_info, 0, sizeof(struct addrinfo)); // 0 memory
-    address_info->ai_family = PF_UNSPEC;
+  ~Sock() { close(); }
+  struct sockaddr_in get_addr(const IpV4Addr &a) const {
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(struct sockaddr_in)); // 0 memory
 
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;     /* Allow IPv4 or IPv6 */
-    hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-    hints.ai_flags = AI_PASSIVE;     /* For wildcard IP address */
-    hints.ai_protocol = 0;           /* Any protocol */
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
-    /* not sure why need to do this */
-    char a_str[16];
-    addr.c_str(a_str);
-    int res = getaddrinfo(a_str, NULL, &hints, &address_info);
-    if (res != 0) {
-      cout << gai_strerror(res) << endl;
-      exit(-1);
-    }
-
-    return address_info;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(addr);
+    address.sin_port = htons(PROTO_PORT);
+    return address;
   }
-  int close() { return ::close(sock_fd); }
+  int close() {
+    int cres = -1;
+    if (sock_fd > 0) {
+      cres = ::close(sock_fd);
+      sock_fd = -1;
+    }
+    return cres;
+  }
 };
 
 /**
@@ -63,36 +56,31 @@ public:
   DataSock(const IpV4Addr &server_addr) : Sock(server_addr) {}
 
   int connect() {
-    cout << "Connecting to ";
-    addr.print();
-    cout << endl;
+    cout << "Connecting to: " << addr << endl;
 
     /* create socket */
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     assert(sock_fd != -1);
 
     /* create and setup sockaddr */
-    struct addrinfo *address_info = get_addr();
+    struct sockaddr_in address = get_addr(addr);
 
     /* connect socket, use assert to handle error case */
-    int cres =
-        ::connect(sock_fd, address_info->ai_addr, address_info->ai_addrlen);
+
+    int cres = ::connect(sock_fd, (struct sockaddr *)&address, sizeof(address));
     if (cres < 0) {
       cout << "Error connecting: " << (int)errno << endl;
     }
-    freeaddrinfo(address_info);
     return cres;
   }
 
   /**
    * send a Packet over this DataSock
    */
-  int send_pkt(Packet &pkt) const {
-    cout << "Sending pkt: ";
-    pkt.print();
-    cout << endl;
+  int send_pkt(const Packet &pkt) const {
+    cout << "Sending pkt: " << pkt << endl;
 
-    unsigned char buffer[pkt.hdr.pkt_len];
+    uint8_t buffer[pkt.hdr.pkt_len];
     pkt.pack(buffer);
     size_t sres = send(sock_fd, buffer, pkt.hdr.pkt_len, 0);
     if (sres == -1) {
@@ -104,40 +92,35 @@ public:
   /**
    * try to receive a Packet over this DataSock,
    * blocks until packet is available.
-   * caller owns the returned Packet
+   *
+   * Returns empty optional if checksum invalid
    */
-  Packet *get_pkt() const {
-    unsigned char hdr_buf[sizeof(PacketHeader)];
+  const Packet get_pkt() const {
+    uint8_t hdr_buf[sizeof(PacketHeader)];
     int rres = recv(sock_fd, hdr_buf, sizeof(PacketHeader), MSG_WAITALL);
     assert(rres != -1);
-    PacketHeader *hdr = PacketHeader::parse(hdr_buf);
+    PacketHeader *hdr_ptr = PacketHeader::parse(hdr_buf);
+    /* assert checksum was valid, kinda unsafe but whatever */
+    assert(hdr_ptr);
 
-    /* if checksum was invalid, return nullptr */
-    if (hdr == nullptr)
-      return nullptr;
+    PacketHeader &hdr = *hdr_ptr;
 
-    Packet *pkt = new Packet(*hdr);
-
-    if (hdr->data_len() > 0) {
+    if (hdr.data_len() > 0) {
+      uint8_t recv_buf[hdr.data_len()];
       /* read data_len from socket, blocks until data_len has been read */
-      rres = recv(sock_fd, pkt->data, hdr->data_len(), MSG_WAITALL);
+      rres = recv(sock_fd, recv_buf, hdr.data_len(), MSG_WAITALL);
       assert(rres != -1);
+      return Packet(hdr, recv_buf);
+    } else {
+      return Packet(hdr);
     }
-
-    cout << "Received pkt: ";
-    pkt->print();
-    cout << endl;
-
-    return pkt;
   };
 
-  static Packet *fetch(Packet &pkt) {
+  static const Packet fetch(const Packet &pkt) {
     DataSock ds(pkt.hdr.dst_addr);
     ds.connect();
     ds.send_pkt(pkt);
-    Packet *resp = ds.get_pkt();
-    ds.close();
-    return resp;
+    return ds.get_pkt();
   }
 };
 
@@ -153,43 +136,25 @@ public:
   ListenSock(const IpV4Addr &a) : Sock(a) {}
 
   int listen() {
+    /* create socket */
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    assert(sock_fd != -1);
+
     /* create and setup sockaddr */
-    struct addrinfo *info;
-    /* try each addr until bind succeeds */
-    for (info = get_addr(); info != nullptr; info = info->ai_next) {
-      /* create socket */
-      sock_fd = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-      if (sock_fd == -1)
-        continue;
-      // cout << "trying to bind: "
-      //      << inet_ntoa(((struct sockaddr_in *)(info->ai_addr))->sin_addr)
-      //      << endl;
-      if (::bind(sock_fd, info->ai_addr, info->ai_addrlen) == 0)
-        break; // success
+    IpV4Addr a(0);
+    struct sockaddr_in address = get_addr(a);
 
-      ::close(sock_fd);
-    }
-    freeaddrinfo(info);
-
-    if (info == nullptr) {
-      cout << "Failed to bind" << endl;
-      exit(-1);
-    } else {
-      cout << "bound" << endl;
-    }
+    /* bind socket, use assert to handle error case */
+    int bres = ::bind(sock_fd, (struct sockaddr *)&address, sizeof(address));
+    assert(bres != -1);
 
     /* start listening with connection queue of 50 */
     int lres = ::listen(sock_fd, 50);
 
     if (lres < 0) {
-      cout << "Failed to start listening on: ";
-      addr.print();
-      cout << " " << errno;
-      cout << endl;
+      cout << "Failed to start listening on: " << addr << endl;
     } else {
-      cout << "Listening on: ";
-      addr.print();
-      cout << endl;
+      cout << "Listening on: " << addr << endl;
     }
 
     return lres;
@@ -199,16 +164,10 @@ public:
    * looks for new connection requests
    * blocks until one is available
    */
-  DataSock accept_connection() const {
-    int data_sock = accept(sock_fd, 0, 0);
-    assert(data_sock != -1);
-
-    DataSock sock(data_sock, addr);
-
-    cout << "Accepted connection on: ";
-    addr.print();
-    cout << endl;
-
-    return sock; // move
+  const DataSock accept_connection() const {
+    int data_sock_fd = accept(sock_fd, 0, 0);
+    assert(data_sock_fd != -1);
+    cout << "Accepted connection on: " << addr << endl;
+    return DataSock(data_sock_fd, addr);
   }
 };

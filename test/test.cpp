@@ -6,6 +6,7 @@
 #include "test_dataframe.h"
 // #include "test_dataframe_chunk.h"
 #include "test_network.h"
+#include "test_packet.h"
 #include "test_parser.h"
 #include "test_row.h"
 #include "test_schema.h"

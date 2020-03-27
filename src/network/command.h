@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 
 /**
  * Stub class to represent Application data running on top of the network

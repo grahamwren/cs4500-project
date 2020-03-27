@@ -4,6 +4,8 @@
 #include "command.h"
 #include "packet.h"
 #include "sock.h"
+#include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -34,29 +36,25 @@ public:
     while (should_continue) {
       cout << "Current peers: [";
       for (int i = 0; i < peers.size(); i++) {
-        peers[i].print();
-        cout << ", ";
+        cout << peers[i] << ", ";
       }
       cout << "]" << endl;
 
-      DataSock ds = listen_s.accept_connection(); // move
-      Packet *pkt = ds.get_pkt();
-      handle_pkt(ds, *pkt);
-      ds.close();
-      delete pkt;
+      const DataSock ds = listen_s.accept_connection();
+      const Packet pkt = ds.get_pkt();
+      cout << "Async: received packet: " << pkt << endl;
+      handle_pkt(ds, pkt);
     }
   }
 
   void teardown() {
     for (int i = 0; i < peers.size(); i++) {
       Packet kill_pkt(my_addr, peers[i], PacketType::SHUTDOWN);
-      Packet *resp = DataSock::fetch(kill_pkt);
-      if (resp->hdr.type != PacketType::OK) {
-        cout << "ERROR: failed to shutdown peer: ";
-        peers[i].print();
-        cout << endl;
+      Packet resp = DataSock::fetch(kill_pkt);
+      cout << "KILL Response: " << resp << endl;
+      if (resp.hdr.type != PacketType::OK) {
+        cout << "ERROR: failed to shutdown peer: " << peers[i] << endl;
       }
-      delete resp;
     }
   }
 
@@ -69,27 +67,22 @@ public:
     // if has a server_addr, register with server
     if (server_addr != 0) {
       Packet req(my_addr, server_addr, PacketType::REGISTER);
-      Packet *resp = DataSock::fetch(req);
-      if (resp->hdr.type != PacketType::OK) {
-        cout << "ERROR: Register req from ";
-        my_addr.print();
-        cout << " to ";
-        server_addr.print();
-        cout << " failed with ";
-        PacketHeader::print_type(resp->hdr.type);
-        cout << endl;
+      Packet resp = DataSock::fetch(req);
+      cout << "REG Response: " << resp << endl;
+      if (resp.hdr.type != PacketType::OK) {
+        cout << "ERROR: Register req from " << my_addr << " to " << server_addr
+             << " failed with " << resp.hdr.type << endl;
       }
-      IpV4Addr *ips = (IpV4Addr *)resp->data;
-      int n_addrs = resp->hdr.data_len() / sizeof(IpV4Addr);
+      IpV4Addr *ips = (IpV4Addr *)resp.data;
+      int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
       peers.reserve(peers.size() + n_addrs);
       for (int i = 0; i < n_addrs; i++) {
         peers.push_back(ips[i]);
       }
-      delete resp;
     }
   }
 
-  void handle_pkt(DataSock &sock, Packet &pkt) {
+  void handle_pkt(const DataSock &sock, const Packet &pkt) {
     switch (pkt.hdr.type) {
     case PacketType::REGISTER:
       handle_register_pkt(sock, pkt);
@@ -111,7 +104,7 @@ public:
     }
   }
 
-  void handle_register_pkt(DataSock &sock, Packet &req) {
+  void handle_register_pkt(const DataSock &sock, const Packet &req) {
     const IpV4Addr &src = req.hdr.src_addr;
     int n_peers = peers.size();
     IpV4Addr ips[n_peers];
@@ -130,24 +123,19 @@ public:
         IpV4Addr &peer_a = peers[i];
         Packet new_peer_req(my_addr, peer_a, PacketType::NEW_PEER,
                             sizeof(IpV4Addr), (unsigned char *)&src);
-        Packet *new_peer_resp = DataSock::fetch(new_peer_req);
-        if (new_peer_resp->hdr.type != PacketType::OK) {
-          cout << "ERROR: New peer req from ";
-          my_addr.print();
-          cout << " to ";
-          peer_a.print();
-          cout << " failed with ";
-          PacketHeader::print_type(new_peer_resp->hdr.type);
-          cout << endl;
+        Packet new_peer_resp = DataSock::fetch(new_peer_req);
+        cout << "NEW_PEER Response: " << new_peer_resp << endl;
+        if (new_peer_resp.hdr.type != PacketType::OK) {
+          cout << "ERROR: New peer req from " << my_addr << " to " << peer_a
+               << " failed with " << new_peer_resp.hdr.type << endl;
         }
-        delete new_peer_resp;
       }
       /* add new peer to peers list */
       peers.push_back(const_cast<IpV4Addr &>(src));
     }
   }
 
-  void handle_new_peer_pkt(DataSock &sock, Packet &req) {
+  void handle_new_peer_pkt(const DataSock &sock, const Packet &req) {
     /* assume data is an IpV4Addr */
     assert(req.data);
     assert(req.hdr.data_len() == sizeof(IpV4Addr));
@@ -158,26 +146,26 @@ public:
       peers.push_back(a);
       /* say hello */
       Packet hello_pkt(my_addr, a, PacketType::HELLO);
-      Packet *resp = DataSock::fetch(hello_pkt);
-      assert(resp->hdr.type == PacketType::OK);
-      delete resp;
+      Packet resp = DataSock::fetch(hello_pkt);
+      cout << "HELLO Response: " << resp << endl;
+      assert(resp.hdr.type == PacketType::OK);
     }
     Packet resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(resp);
   }
 
-  void handle_shutdown_pkt(DataSock &sock, Packet &req) {
+  void handle_shutdown_pkt(const DataSock &sock, const Packet &req) {
     Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(ok_resp);
     should_continue = false;
   }
 
-  void handle_hello_pkt(DataSock &sock, Packet &req) {
+  void handle_hello_pkt(const DataSock &sock, const Packet &req) {
     Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(ok_resp);
   }
 
-  void handle_data_pkt(DataSock &sock, Packet &pkt) {
+  void handle_data_pkt(const DataSock &sock, const Packet &pkt) {
     Command *cmd = new Command(pkt.hdr.data_len(), pkt.data);
     handle_cmd(cmd);
   }

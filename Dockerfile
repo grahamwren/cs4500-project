@@ -1,10 +1,7 @@
-FROM ubuntu:18.04
-# Do not exclude man pages & other documentation
-RUN rm /etc/dpkg/dpkg.cfg.d/excludes
+FROM alpine:3.11.5
 
-RUN sed -i -e 's/:\/\/(archive.ubuntu.com\|security.ubuntu.com)/old-releases.ubuntu.com/g' /etc/apt/sources.list
+# use unstable edge repo packages
+RUN sed -i -e 's/v[[:digit:]]\..*\//edge\//g' /etc/apk/repositories
 
-RUN apt-get update --fix-missing
-RUN apt-get upgrade -y
-RUN apt-get install g++ valgrind cmake git clang man -y
-RUN apt-get install g++-8 -y
+RUN apk upgrade --update-cache --available
+RUN apk add bash make clang g++ man tcpdump

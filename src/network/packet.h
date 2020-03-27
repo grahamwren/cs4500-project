@@ -46,6 +46,9 @@ public:
   operator uint32_t() const {
     return (part1 << 24) | (part2 << 16) | (part3 << 8) | part4;
   }
+  bool operator<(const IpV4Addr &other) const {
+    return (uint32_t)(*this) < (uint32_t)other;
+  }
 
   bool equals(const IpV4Addr &o) const {
     return part1 == o.part1 && part2 == o.part2 && part3 == o.part3 &&
@@ -133,7 +136,8 @@ public:
   Packet(PacketHeader const &h) : hdr(h), data(0, nullptr) {}
   Packet(PacketHeader const &h, uint8_t *src_data)
       : hdr(h), data(hdr.data_len(), new uint8_t[hdr.data_len()]) {
-    memcpy(data.ptr, src_data, hdr.data_len());
+    if (src_data)
+      memcpy(data.ptr, src_data, hdr.data_len());
   }
 
   // build to send
@@ -141,10 +145,14 @@ public:
          uint8_t *input)
       : hdr(src, dst, data_len + sizeof(PacketHeader), type),
         data(data_len, new uint8_t[hdr.data_len()]) {
-    memcpy(data.ptr, input, hdr.data_len());
+    if (input)
+      memcpy(data.ptr, input, hdr.data_len());
   }
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type, const char *input)
       : Packet(src, dst, type, strlen(input) + 1, (uint8_t *)input) {}
+  Packet(IpV4Addr src, IpV4Addr dst, PacketType type,
+         const sized_ptr<uint8_t> &d)
+      : Packet(src, dst, type, d.len, d.ptr) {}
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
       : Packet(src, dst, type, 0, nullptr) {}
 
@@ -161,6 +169,9 @@ public:
     hdr.pack(buf);
     memcpy(buf + sizeof(PacketHeader), data.ptr, data.len);
   }
+
+  bool ok() const { return hdr.type == PacketType::OK; }
+  bool error() const { return hdr.type == PacketType::ERR; }
 };
 
 ostream &operator<<(ostream &output, const IpV4Addr &ip) {

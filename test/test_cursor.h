@@ -14,7 +14,7 @@ TEST(TestCursor, test_pack_yield) {
   pack(wc, true);
   pack(wc, sized_ptr(5, "hello"));
   string s("applesauce");
-  pack<string &>(wc, s);
+  pack<const string &>(wc, s);
 
   ReadCursor rc(wc.length(), wc.bytes());
   EXPECT_EQ(yield<int>(rc), 2);

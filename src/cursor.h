@@ -105,6 +105,8 @@ public:
   WriteCursor() = default;
   WriteCursor(int len) { ensure_space(len); }
 
+  operator sized_ptr<uint8_t>() { return sized_ptr(length(), bytes()); }
+
   /**
    * handle bytes vector resizing manually. Reserve memory manually growing by
    * the page size until large enough.
@@ -126,7 +128,7 @@ public:
     data.insert(data.end(), item_ptr, item_ptr + sizeof(T));
   }
 
-  int length() { return data.size(); }
+  int length() const { return data.size(); }
   uint8_t *bytes() { return &data[0]; }
 };
 
@@ -147,6 +149,6 @@ template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
   pack(c, (sized_ptr<const char>)ptr);
 }
 
-template <> inline void pack(WriteCursor &c, std::string &val) {
+template <> inline void pack(WriteCursor &c, const std::string &val) {
   pack<sized_ptr<const char>>(c, sized_ptr(val.size(), val.c_str()));
 }

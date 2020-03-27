@@ -38,23 +38,20 @@ int main(int argc, char **argv) {
     server_a = get_server_ip(argc, argv);
     n.register_with(server_a);
   }
-  n.set_data_handler([](ReadCursor &rc) {
+  n.set_data_handler([](IpV4Addr src, ReadCursor &rc) {
     int len = rc.length();
     char buf[len + 1];
     for (int i = 0; i < len; i++) {
       buf[i] = yield<char>(rc);
     }
     buf[len] = '\0';
-    cout << "Handler got: " << buf << endl;
-    return true;
+    cout << "Handler got: " << buf << " from " << src << endl;
+    return sized_ptr<uint8_t>(0, nullptr);
   });
 
   std::this_thread::sleep_for(100ms);
 
-  auto cluster = n.cluster();
-  for (auto peer : cluster) {
-    n.send_data(peer, sized_ptr(11, (uint8_t *)"Hello world"));
-  }
+  n.send_data_to_cluster(sized_ptr(11, (uint8_t *)"Hello world"));
 
   if (argc > 5 && strcmp(argv[5], "--shutdown") == 0) {
     cout << "starting shutdown" << endl;

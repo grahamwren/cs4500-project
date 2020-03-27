@@ -23,7 +23,7 @@ to find the parts it does not own (see Implementation for more).
 
 # Implementation
 
-![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-project_1-part2/raw/master/diagram.png)
+![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-assignment_1-part2/raw/master/diagram.png)
 
 The Application class represents an operation that makes use of a KV to
 manipulate dataframes. The KV class utilizes the network to manage dataframes.

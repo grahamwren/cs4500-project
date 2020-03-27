@@ -31,6 +31,12 @@ $(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_
 $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
+$(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
+
+$(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
+
 $(BUILD_DIR)/bench.exe: $(SRC_DIR)/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
@@ -78,13 +84,12 @@ docker_valgrind: docker_install
 #     cat cont_hashs.ignore_me |
 #     xargs -t -n1 docker logs
 run_network: docker_install
-	$(call docker_run, make clean $(BUILD_DIR)/node_example.exe)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.2, 172.168.0.2)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.4  --server-ip 172.168.0.3, 172.168.0.4)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.5  --server-ip 172.168.0.4, 172.168.0.5)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.6  --server-ip 172.168.0.5, 172.168.0.6)
-	$(call docker_run_detach, ./$(BUILD_DIR)/node_example.exe --ip 172.168.0.7  --server-ip 172.168.0.6 --shutdown, 172.168.0.7)
+	$(call docker_run, make clean $(BUILD_DIR)/node_example.exe $(BUILD_DIR)/kv_node.exe)
+	$(call docker_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
+	$(call docker_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
+	$(call docker_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
+	$(call docker_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
+	$(call docker_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 
 docker_install: docker_clean Dockerfile
 	docker build -t $(CONT_NAME) .

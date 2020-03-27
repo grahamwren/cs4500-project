@@ -6,23 +6,23 @@
 
 class Command {
 public:
-  enum Type : uint8_t { GET, PUT, DIRECTORY };
+  enum Type : uint8_t { GET, PUT, OWN };
 
   const Type type;
   union {
-    struct {                   // <------+
-      ChunkKey key;            // <------|-- get
-      DataChunk data;          //        +-- put
-    };                         // <------+
-    vector<ChunkKey> dir_keys; // <-- directory
+    struct {          // <------+
+      ChunkKey key;   // <------|-- get
+      DataChunk data; //        +-- put
+    };                // <------+
+    string name;      // <-- own
   };
 
-  Command(ChunkKey &k) : type(Type::GET), key(k) {}
-  Command(ChunkKey &k, DataChunk &dc)
-      : type(Type::PUT), key(k), DataChunk(data) {}
-  Command(vector<ChunkKey> &&keys) : type(Type::DIRECTORY), dir_keys(keys) {}
+  Command(const ChunkKey &k) : type(Type::GET), key(k) {}
+  Command(const ChunkKey &k, const DataChunk &dc)
+      : type(Type::PUT), key(k), data(dc) {}
+  Command(const string &ns) : type(Type::OWN), name(ns) {}
 
-  Command(ReadCursor &c) : type(yield<uint8_t>(c)) {
+  Command(ReadCursor &c) : type(yield<Command::Type>(c)) {
     switch (type) {
     case Type::GET:
       key = ChunkKey(c);
@@ -31,18 +31,16 @@ public:
       key = ChunkKey(c);
       data = DataChunk(c);
       break;
-    case Type::DIRECTORY:
-      int len = yield<int>(c);
-      dir_keys.reserve(len);
-      for (int i = 0; i < len; i++) {
-        dir_keys.emplace_back(c);
-      }
+    case Type::OWN:
+      name = yield<string>(c);
       break;
     }
   }
 
+  ~Command() {}
+
   void serialize(WriteCursor &wc) {
-    pack<uint8_t>(wc, type);
+    pack(wc, type);
     switch (type) {
     case Type::GET:
       key.serialize(wc);
@@ -51,10 +49,8 @@ public:
       key.serialize(wc);
       data.serialize(wc);
       break;
-    case Type::DIRECTORY:
-      pack(wc, (int)dir_keys.size());
-      for (auto ck : dir_keys)
-        ck.serialize(wc);
+    case Type::OWN:
+      pack<const string &>(wc, name);
       break;
     }
   }

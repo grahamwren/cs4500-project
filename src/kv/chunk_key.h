@@ -10,9 +10,10 @@ public:
   string name;
   int chunk_idx;
 
-  ChunkKey(Cursor &c) : name(yield<string>(c)), chunk_idx(yield<int>(c)) {}
+  ChunkKey(const ChunkKey &) = default;
+  ChunkKey(ReadCursor &c) : name(yield<string>(c)), chunk_idx(yield<int>(c)) {}
 
-  bool operator<(const ChunkKey &rhs) {
+  bool operator<(const ChunkKey &rhs) const {
     int nr = name.compare(rhs.name);
     if (nr == 0) {
       return chunk_idx < rhs.chunk_idx;
@@ -22,7 +23,7 @@ public:
   }
 
   void serialize(WriteCursor &c) {
-    pack(c, name);
+    pack<const string &>(c, name);
     pack(c, chunk_idx);
   }
 };

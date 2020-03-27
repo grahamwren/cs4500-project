@@ -38,6 +38,13 @@ template <typename T> inline T yield(ReadCursor &c) {
   return type_cursor[0];
 }
 
+template <> inline sized_ptr<uint8_t> yield(ReadCursor &c) {
+  int len = yield<int>(c);
+  uint8_t *start_ptr = reinterpret_cast<uint8_t *>(c.cursor);
+  c.cursor += len * sizeof(uint8_t);
+  return sized_ptr(len, start_ptr);
+}
+
 template <> inline sized_ptr<char> yield(ReadCursor &c) {
   int len = yield<int>(c);
   char *start_ptr = reinterpret_cast<char *>(c.cursor);
@@ -135,6 +142,14 @@ public:
 template <typename T> inline void pack(WriteCursor &c, T val) {
   c.ensure_space(sizeof(T));
   c.write(val);
+}
+
+template <> inline void pack(WriteCursor &c, sized_ptr<uint8_t> ptr) {
+  c.ensure_space(sizeof(int) + (sizeof(uint8_t) * ptr.len));
+  c.write(ptr.len);
+  for (int i = 0; i < ptr.len; i++) {
+    c.write(ptr[i]);
+  }
 }
 
 template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {

@@ -235,10 +235,10 @@ public:
     return success;
   }
 
-  ReadCursor send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data) {
+  sized_ptr<uint8_t> send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data) {
     Packet req(my_addr, dest, PacketType::DATA, data.len, data.ptr);
     Packet resp = DataSock::fetch(req);
     cout << "Recv data resp: " << resp << endl;
-    return ReadCursor(resp.data);
+    return resp.data;
   }
 };

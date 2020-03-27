@@ -12,7 +12,7 @@ public:
   DataFrame *df;
   void SetUp() {
     file = "<1><0><33>\n"
-           "<0><44.5><apples><1><>\n"
+           "<0><44.5><\"apples\"><1><>\n"
            "<1><><oranges><0>\n";
     scm = new Schema("BFSBM");
     df = new SimpleDataFrame(*scm);

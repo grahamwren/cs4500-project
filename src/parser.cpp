@@ -319,14 +319,18 @@ bool Parser::parse_float(Data &dest) {
 bool Parser::parse_string(Data &dest) {
   checkpoint(cursor);
 
-  char *start = reinterpret_cast<char *>(cursor.cursor);
+  char *start;
   int i = 0;
+  bool accept = false;
   /* check for quoted string */
   if (expect<char>(cursor, '"')) {
+    accept = true;
+    start = reinterpret_cast<char *>(cursor.cursor);
     while (has_next(cursor) && yield<char>(cursor) != '"') {
       i++;
     }
   } else {
+    start = reinterpret_cast<char *>(cursor.cursor);
     while (has_next(cursor) && yield<char>(cursor) != '>') {
       i++;
     }
@@ -336,7 +340,7 @@ bool Parser::parse_string(Data &dest) {
     }
   }
 
-  bool accept = i > 0 && (empty(cursor) || peek<char>(cursor) == '>');
+  accept = (accept || i > 0) && (empty(cursor) || peek<char>(cursor) == '>');
   if (accept) {
     string *val = new string(start, i);
     dest.set(val);

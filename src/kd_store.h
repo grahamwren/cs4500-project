@@ -1,14 +1,16 @@
 #pragma once
-#include "kv.h"
+
 #include "dataframe.h"
+#include "kv/kv.h"
 
 class KDStore {
+protected:
+  KV data_store;
+
 public:
-  KV _kv;
-  KDStore(KV &kv) : _kv(kv) { }
+  KDStore(KV &kv) : data_store(kv) {}
 
   DataFrame *get(Key key);
 
-  void put(Key key, DataFrame& df);
+  void put(Key key, DataFrame &df);
 };
-

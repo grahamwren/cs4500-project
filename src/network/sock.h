@@ -56,8 +56,6 @@ public:
   DataSock(const IpV4Addr &server_addr) : Sock(server_addr) {}
 
   int connect() {
-    cout << "Connecting to: " << addr << endl;
-
     /* create socket */
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     assert(sock_fd != -1);
@@ -69,7 +67,7 @@ public:
 
     int cres = ::connect(sock_fd, (struct sockaddr *)&address, sizeof(address));
     if (cres < 0) {
-      cout << "Error connecting: " << (int)errno << endl;
+      cout << "ERROR: failed to connect " << (int)errno << endl;
     }
     return cres;
   }
@@ -78,13 +76,13 @@ public:
    * send a Packet over this DataSock
    */
   int send_pkt(const Packet &pkt) const {
-    cout << "Sending pkt: " << pkt << endl;
+    cout << "DataSock.send(" << pkt << ")" << endl;
 
     uint8_t buffer[pkt.hdr.pkt_len];
     pkt.pack(buffer);
     size_t sres = send(sock_fd, buffer, pkt.hdr.pkt_len, 0);
     if (sres == -1) {
-      cout << "ERROR: failed to send pkt, error: " << (int)errno << endl;
+      cout << "ERROR: failed to send pkt " << (int)errno << endl;
     }
     return sres;
   };
@@ -152,9 +150,7 @@ public:
     int lres = ::listen(sock_fd, 50);
 
     if (lres < 0) {
-      cout << "Failed to start listening on: " << addr << endl;
-    } else {
-      cout << "Listening on: " << addr << endl;
+      cout << "ERROR: failed to start listening on " << addr << endl;
     }
 
     return lres;
@@ -167,7 +163,6 @@ public:
   const DataSock accept_connection() const {
     int data_sock_fd = accept(sock_fd, 0, 0);
     assert(data_sock_fd != -1);
-    cout << "Accepted connection on: " << addr << endl;
     return DataSock(data_sock_fd, addr);
   }
 };

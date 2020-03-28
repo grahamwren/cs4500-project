@@ -3,6 +3,7 @@
 #include "chunk_key.h"
 #include "data_chunk.h"
 #include <cstring>
+#include <iostream>
 
 class Command {
 public:
@@ -22,19 +23,22 @@ public:
       : type(Type::PUT), key(k), data(dc) {}
   Command(const string &ns) : type(Type::OWN), name(ns) {}
 
-  Command(ReadCursor &c) : type(yield<Command::Type>(c)) {
-    switch (type) {
-    case Type::GET:
-      key = ChunkKey(c);
-      break;
-    case Type::PUT:
-      key = ChunkKey(c);
-      data = DataChunk(c);
-      break;
-    case Type::OWN:
-      name = yield<string>(c);
-      break;
+  static Command unpack(ReadCursor &c) {
+    Type t = yield<Type>(c);
+    if (t == Type::GET) {
+      ChunkKey key(c);
+      return Command(key);
     }
+    if (t == Type::PUT) {
+      ChunkKey key(c);
+      DataChunk data(c);
+      return Command(key, data);
+    }
+    if (t == Type::OWN) {
+      string name = yield<string>(c);
+      return Command(name);
+    }
+    assert(false); // unknown type
   }
 
   ~Command() {}
@@ -55,3 +59,38 @@ public:
     }
   }
 };
+
+ostream &operator<<(ostream &output, const Command::Type &t) {
+  switch (t) {
+  case Command::Type::GET:
+    output << "GET";
+    break;
+  case Command::Type::PUT:
+    output << "PUT";
+    break;
+  case Command::Type::OWN:
+    output << "OWN";
+    break;
+  default:
+    output << "<unknown Command::Type>";
+  }
+  return output;
+}
+ostream &operator<<(ostream &output, const Command &cmd) {
+  output << "Command<" << (void *)&cmd << ">(type: " << cmd.type << ", ";
+  switch (cmd.type) {
+  case Command::Type::GET:
+    output << cmd.key;
+    break;
+  case Command::Type::PUT:
+    output << cmd.key << ", " << cmd.data;
+    break;
+  case Command::Type::OWN:
+    output << "name: " << cmd.name.c_str();
+    break;
+  default:
+    output << "<unknown Command::Type>";
+  }
+  output << ")";
+  return output;
+}

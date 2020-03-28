@@ -37,7 +37,7 @@ protected:
       cout << "waiting for packet..." << endl;
       const DataSock ds = listen_s.accept_connection();
       const Packet pkt = ds.get_pkt();
-      cout << "Async: received packet: " << pkt << endl;
+      cout << "Node.asyncRecv(" << pkt << ")" << endl;
       handle_pkt(ds, pkt);
       check_if_new_peer(pkt.hdr.src_addr);
     }
@@ -121,14 +121,9 @@ protected:
     if (it == peers.end()) {
       /* add peer */
       peers.emplace(a);
-
-      /* say hello */
-      Packet hello_pkt(my_addr, a, PacketType::HELLO);
-      const Packet resp = DataSock::fetch(hello_pkt);
-      cout << "HELLO Response: " << resp << endl;
-      assert(resp.hdr.type == PacketType::OK);
+      print_peers();
     } else {
-      cout << "Already seen peer: " << a << endl;
+      cout << "ERROR: already seen peer " << a << endl;
     }
   }
 
@@ -157,8 +152,12 @@ protected:
 
   void print_peers() {
     cout << "Peers[";
-    for (auto peer : peers)
-      cout << peer << ", ";
+    auto it = peers.begin();
+    if (it != peers.end())
+      cout << *(it++);
+
+    for (; it != peers.end(); it++)
+      cout << ", " << *it;
     cout << ']' << endl;
   }
 
@@ -183,7 +182,7 @@ public:
     for (auto peer : peers) {
       Packet kill_pkt(my_addr, peer, PacketType::SHUTDOWN);
       const Packet resp = DataSock::fetch(kill_pkt);
-      cout << "KILL Response: " << resp << endl;
+      cout << "Node.recv(" << resp << ")" << endl;
       if (resp.hdr.type != PacketType::OK) {
         cout << "ERROR: failed to shutdown peer: " << peer << endl;
       }
@@ -202,7 +201,7 @@ public:
     Packet req(my_addr, server_a, PacketType::REGISTER);
     const Packet resp = DataSock::fetch(req);
 
-    cout << "REG Response: " << resp << endl;
+    cout << "Node.recv(" << resp << ")" << endl;
     assert(resp.hdr.type == PacketType::OK);
 
     IpV4Addr *ips = (IpV4Addr *)resp.data.ptr;
@@ -214,10 +213,7 @@ public:
   /**
    * sorted set of ips in cluster, including self
    */
-  const set<IpV4Addr> &cluster() {
-    shared_lock lock(peers_mtx);
-    return peers;
-  }
+  const set<IpV4Addr> &cluster() const { return peers; }
 
   bool send_data_to_cluster(sized_ptr<uint8_t> data) {
     shared_lock lock(peers_mtx);
@@ -229,16 +225,17 @@ public:
 
       Packet req(my_addr, peer, PacketType::DATA, data.len, data.ptr);
       const Packet resp = DataSock::fetch(req);
-      cout << "Recv data resp: " << resp << endl;
+      cout << "Node.recv(" << resp << ")" << endl;
       success = success && resp.ok();
     }
     return success;
   }
 
-  sized_ptr<uint8_t> send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data) {
+  DataChunk send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data,
+                      uint8_t *buf = nullptr) {
     Packet req(my_addr, dest, PacketType::DATA, data.len, data.ptr);
     Packet resp = DataSock::fetch(req);
-    cout << "Recv data resp: " << resp << endl;
-    return resp.data;
+    cout << "Node.recv(" << resp << ")" << endl;
+    return DataChunk(resp.data);
   }
 };

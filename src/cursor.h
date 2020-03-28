@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <inttypes.h>
+#include <iostream>
 #include <stack>
 #include <string>
 #include <type_traits>
@@ -20,7 +21,7 @@ public:
   ReadCursor(int len, uint8_t *b)
       : bytes(b), cursor(b), bytes_end(b + len),
         checkpoints(new std::stack<uint8_t *>()) {}
-  ReadCursor(sized_ptr<uint8_t> data) : ReadCursor(data.len, data.ptr) {}
+  ReadCursor(const sized_ptr<uint8_t> data) : ReadCursor(data.len, data.ptr) {}
   ReadCursor(ReadCursor &&c)
       : bytes(c.bytes), cursor(c.cursor), bytes_end(c.bytes_end),
         checkpoints(c.checkpoints) {
@@ -58,7 +59,7 @@ template <> inline sized_ptr<const char> yield(ReadCursor &c) {
 
 template <> inline std::string yield(ReadCursor &c) {
   sized_ptr<const char> sp = yield<sized_ptr<const char>>(c);
-  return std::string(sp.ptr, sp.len);
+  return std::string(sp.ptr, sp.len - 1);
 }
 
 template <typename T> inline void unyield(ReadCursor &c) {
@@ -102,13 +103,12 @@ inline void rollback(ReadCursor &c) {
 
 class WriteCursor {
 private:
-  std::vector<uint8_t> data;
-
   static int get_next_page_size(int len) {
     return ceil(len / (float)getpagesize()) * getpagesize();
   }
 
 public:
+  std::vector<uint8_t> data;
   WriteCursor() = default;
   WriteCursor(int len) { ensure_space(len); }
 
@@ -146,7 +146,7 @@ template <typename T> inline void pack(WriteCursor &c, T val) {
 
 template <> inline void pack(WriteCursor &c, sized_ptr<uint8_t> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(uint8_t) * ptr.len));
-  c.write(ptr.len);
+  c.write((int)ptr.len);
   for (int i = 0; i < ptr.len; i++) {
     c.write(ptr[i]);
   }
@@ -154,7 +154,7 @@ template <> inline void pack(WriteCursor &c, sized_ptr<uint8_t> ptr) {
 
 template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(char) * ptr.len));
-  c.write(ptr.len);
+  c.write((int)ptr.len);
   for (int i = 0; i < ptr.len; i++) {
     c.write(ptr[i]);
   }
@@ -165,5 +165,5 @@ template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
 }
 
 template <> inline void pack(WriteCursor &c, const std::string &val) {
-  pack<sized_ptr<const char>>(c, sized_ptr(val.size(), val.c_str()));
+  pack<sized_ptr<const char>>(c, sized_ptr(val.size() + 1, val.c_str()));
 }

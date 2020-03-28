@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cursor.h"
+#include <iostream>
 #include <string>
 
 using namespace std;
@@ -11,6 +12,7 @@ public:
   int chunk_idx;
 
   ChunkKey(const ChunkKey &) = default;
+  ChunkKey(const string &ns, int idx) : name(ns), chunk_idx(idx) {}
   ChunkKey(ReadCursor &c) : name(yield<string>(c)), chunk_idx(yield<int>(c)) {}
 
   bool operator<(const ChunkKey &rhs) const {
@@ -27,3 +29,8 @@ public:
     pack(c, chunk_idx);
   }
 };
+
+ostream &operator<<(ostream &output, const ChunkKey &k) {
+  output << "key: " << k.name.c_str() << ", idx: " << k.chunk_idx;
+  return output;
+}

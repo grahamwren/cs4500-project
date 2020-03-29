@@ -73,7 +73,8 @@ define docker_net_run
 	docker run -ti --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
-define docker_net_run_detach
+# starts this command in a container and then detaches
+define docker_net_start
 	docker run -tid --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
@@ -89,11 +90,11 @@ docker_valgrind: docker_install
 #     xargs -t -n1 docker logs
 run_network: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe)
-	$(call docker_net_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
-	$(call docker_net_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
-	$(call docker_net_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
-	$(call docker_net_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
-	$(call docker_net_run_detach, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 	$(call docker_net_run, ./$(BUILD_DIR)/demo.exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
 
 docker_install: docker_clean Dockerfile

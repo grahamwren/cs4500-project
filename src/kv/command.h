@@ -2,6 +2,7 @@
 
 #include "chunk_key.h"
 #include "data_chunk.h"
+#include "sized_ptr.h"
 #include <cstring>
 #include <iostream>
 
@@ -20,30 +21,30 @@ public:
 
   Command(const ChunkKey &k) : type(Type::GET), key(k) {}
   Command(const ChunkKey &k, const DataChunk &dc)
-      : type(Type::PUT), key(k), data(dc) {}
+      : type(Type::PUT), key(k), data(dc.data()) {}
   Command(const string &ns) : type(Type::OWN), name(ns) {}
-
-  static Command unpack(ReadCursor &c) {
-    Type t = yield<Type>(c);
-    if (t == Type::GET) {
-      ChunkKey key(c);
-      return Command(key);
+  Command(ReadCursor &c) : type(yield<Type>(c)) {
+    switch (type) {
+    case Type::GET:
+      key = ChunkKey(c);
+      break;
+    case Type::PUT:
+      key = ChunkKey(c);
+      data = DataChunk(c);
+      break;
+    case Type::OWN:
+      name = yield<string>(c);
+      break;
+    default:
+      cout << "EXPECTED: OneOf[" << Type::GET << "," << Type::PUT << ","
+           << Type::OWN << "] was: " << type << endl;
+      assert(false); // unknown type/malformed bytes
     }
-    if (t == Type::PUT) {
-      ChunkKey key(c);
-      DataChunk data(c);
-      return Command(key, data);
-    }
-    if (t == Type::OWN) {
-      string name = yield<string>(c);
-      return Command(name);
-    }
-    assert(false); // unknown type
   }
 
   ~Command() {}
 
-  void serialize(WriteCursor &wc) {
+  void serialize(WriteCursor &wc) const {
     pack(wc, type);
     switch (type) {
     case Type::GET:
@@ -57,6 +58,20 @@ public:
       pack<const string &>(wc, name);
       break;
     }
+  }
+
+  bool operator==(const Command &other) const {
+    if (type == other.type) {
+      switch (type) {
+      case Type::GET:
+        return key == other.key;
+      case Type::PUT:
+        return key == other.key && data == other.data;
+      case Type::OWN:
+        return name.compare(other.name) == 0;
+      }
+    }
+    return false;
   }
 };
 
@@ -83,7 +98,7 @@ ostream &operator<<(ostream &output, const Command &cmd) {
     output << cmd.key;
     break;
   case Command::Type::PUT:
-    output << cmd.key << ", " << cmd.data;
+    output << "key: " << cmd.key << ", data: " << cmd.data;
     break;
   case Command::Type::OWN:
     output << "name: " << cmd.name.c_str();

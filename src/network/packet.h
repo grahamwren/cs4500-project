@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kv/data_chunk.h"
 #include <cstring>
 #include <iostream>
 
@@ -125,49 +126,31 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
  */
 class Packet {
 public:
-  PacketHeader hdr;        // 20 bytes
-  sized_ptr<uint8_t> data; // owned
+  PacketHeader hdr; // 20 bytes
+  DataChunk data;   // owned
 
   /* explicity delete copy and move constructors to ensure copy-elision */
   Packet(Packet &&) = delete;
   Packet(const Packet &) = delete;
 
   // build on receive
-  Packet(PacketHeader const &h) : hdr(h), data(0, nullptr) {}
-  Packet(PacketHeader const &h, uint8_t *src_data)
-      : hdr(h), data(hdr.data_len(), new uint8_t[hdr.data_len()]) {
-    if (src_data)
-      memcpy(data.ptr, src_data, hdr.data_len());
-  }
+  Packet(const PacketHeader &h) : hdr(h) {}
+  Packet(const PacketHeader &h, uint8_t *src_data)
+      : hdr(h), data(hdr.data_len(), src_data) {}
 
   // build to send
-  Packet(IpV4Addr src, IpV4Addr dst, PacketType type, int data_len,
-         uint8_t *input)
-      : hdr(src, dst, data_len + sizeof(PacketHeader), type),
-        data(data_len, new uint8_t[hdr.data_len()]) {
-    if (input)
-      memcpy(data.ptr, input, hdr.data_len());
-  }
-  Packet(IpV4Addr src, IpV4Addr dst, PacketType type, const char *input)
-      : Packet(src, dst, type, strlen(input) + 1, (uint8_t *)input) {}
+  Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
+      : hdr(src, dst, sizeof(PacketHeader), type) {}
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type,
          const sized_ptr<uint8_t> &d)
-      : Packet(src, dst, type, d.len, d.ptr) {}
-  Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
-      : Packet(src, dst, type, 0, nullptr) {}
-
-  ~Packet() {
-    delete[] data.ptr;
-    data.len = 0;
-    data.ptr = nullptr;
-  }
+      : hdr(src, dst, d.len + sizeof(PacketHeader), type), data(d) {}
 
   /**
    * write the bytes representation of this Packet into the given buffer
    */
   void pack(uint8_t *buf) const {
     hdr.pack(buf);
-    memcpy(buf + sizeof(PacketHeader), data.ptr, data.len);
+    memcpy(buf + sizeof(PacketHeader), data.ptr(), data.len());
   }
 
   bool ok() const { return hdr.type == PacketType::OK; }
@@ -217,18 +200,7 @@ ostream &operator<<(ostream &output, const PacketHeader &hdr) {
 }
 
 ostream &operator<<(ostream &output, const Packet &pkt) {
-  output << "Packet<" << (void *)&pkt << ">(header: " << pkt.hdr << ", data: [";
-
-  char bytes_s[6];
-  if (pkt.hdr.data_len() > 0) {
-    sprintf(bytes_s, "0x%x", pkt.data[0]);
-    output << bytes_s;
-  }
-
-  for (int i = 1; i < pkt.hdr.data_len(); i++) {
-    sprintf(bytes_s, ",0x%x", pkt.data[i]);
-    output << bytes_s;
-  }
-  output << "])";
+  output << "Packet<" << (void *)&pkt << ">(header: " << pkt.hdr
+         << ", data: " << pkt.data << ")";
   return output;
 }

@@ -11,9 +11,11 @@ public:
   string name;
   int chunk_idx;
 
-  ChunkKey(const ChunkKey &) = default;
+  ChunkKey() = default;
+  ChunkKey(const char *ns, int idx) : name(ns), chunk_idx(idx) {}
   ChunkKey(const string &ns, int idx) : name(ns), chunk_idx(idx) {}
   ChunkKey(ReadCursor &c) : name(yield<string>(c)), chunk_idx(yield<int>(c)) {}
+  ChunkKey(const ChunkKey &) = default;
 
   bool operator<(const ChunkKey &rhs) const {
     int nr = name.compare(rhs.name);
@@ -24,13 +26,17 @@ public:
     }
   }
 
-  void serialize(WriteCursor &c) {
+  void serialize(WriteCursor &c) const {
     pack<const string &>(c, name);
     pack(c, chunk_idx);
+  }
+
+  bool operator==(const ChunkKey &other) const {
+    return chunk_idx == other.chunk_idx && name.compare(other.name) == 0;
   }
 };
 
 ostream &operator<<(ostream &output, const ChunkKey &k) {
-  output << "key: " << k.name.c_str() << ", idx: " << k.chunk_idx;
+  output << "{ name: " << k.name.c_str() << ", idx: " << k.chunk_idx << " }";
   return output;
 }

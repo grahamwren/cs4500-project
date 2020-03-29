@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cursor.h"
+#include "kv/command.h"
 #include "packet.h"
 #include "sized_ptr.h"
 #include "sock.h"
@@ -28,7 +29,7 @@ protected:
   std::atomic<bool> should_continue;
   const IpV4Addr my_addr;
   ListenSock listen_s;
-  shared_mutex peers_mtx;
+  mutable shared_mutex peers_mtx;
   set<IpV4Addr> peers;
   handler_fn_type data_handler;
 
@@ -60,8 +61,8 @@ protected:
         if (peer == ip || peer == my_addr)
           continue;
 
-        Packet req(my_addr, peer, PacketType::NEW_PEER, sizeof(IpV4Addr),
-                   (uint8_t *)&ip);
+        sized_ptr<uint8_t> d(sizeof(IpV4Addr), (uint8_t *)&ip);
+        Packet req(my_addr, peer, PacketType::NEW_PEER, d);
         const Packet resp = DataSock::fetch(req);
         assert(resp.hdr.type == PacketType::OK);
       }
@@ -92,7 +93,7 @@ protected:
     }
   }
 
-  void handle_register_pkt(const DataSock &sock, const Packet &req) {
+  void handle_register_pkt(const DataSock &sock, const Packet &req) const {
     shared_lock lock(peers_mtx);
     const IpV4Addr &src = req.hdr.src_addr;
     const int n_peers = peers.size();
@@ -101,21 +102,29 @@ protected:
     for (auto peer : peers) {
       ips[i++] = peer;
     }
-    Packet resp(my_addr, src, PacketType::OK, sizeof(IpV4Addr) * n_peers,
-                (uint8_t *)ips);
+    lock.unlock();
+
+    sized_ptr<uint8_t> d(sizeof(IpV4Addr) * n_peers, (uint8_t *)ips);
+    Packet resp(my_addr, src, PacketType::OK, d);
     sock.send_pkt(resp);
   }
 
   void handle_new_peer_pkt(const DataSock &sock, const Packet &req) {
-    unique_lock lock(peers_mtx);
     /* assume data is an IpV4Addr */
-    assert(req.data.ptr);
+    assert(req.data.ptr());
     assert(req.hdr.data_len() == sizeof(IpV4Addr));
 
     Packet resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(resp);
 
-    const IpV4Addr &a = *(IpV4Addr *)req.data.ptr;
+    const IpV4Addr &a = *(IpV4Addr *)req.data.ptr();
+
+    /* say hello */
+    Packet hello(my_addr, a, PacketType::HELLO);
+    Packet h_resp = DataSock::fetch(hello);
+    assert(h_resp.ok());
+
+    unique_lock lock(peers_mtx);
     auto it = peers.find(a);
     /* if not found in peers list */
     if (it == peers.end()) {
@@ -139,7 +148,7 @@ protected:
   }
 
   void handle_data_pkt(const DataSock &sock, const Packet &req) const {
-    ReadCursor rc(req.data);
+    ReadCursor rc(req.data.data());
     auto res = data_handler(req.hdr.src_addr, rc);
     if (res.has_value()) {
       Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK, res.value());
@@ -150,7 +159,7 @@ protected:
     }
   }
 
-  void print_peers() {
+  void print_peers() const {
     cout << "Peers[";
     auto it = peers.begin();
     if (it != peers.end())
@@ -173,7 +182,7 @@ public:
 
   void set_data_handler(handler_fn_type handler) { data_handler = handler; }
 
-  const IpV4Addr &addr() { return my_addr; }
+  const IpV4Addr &addr() const { return my_addr; }
 
   void teardown() {
     shared_lock lock(peers_mtx);
@@ -191,11 +200,13 @@ public:
   }
 
   void register_with(const IpV4Addr &server_a) {
-    assert(my_addr != server_a);
-    unique_lock lock(peers_mtx);
+    // assert(my_addr != server_a);
+    unique_lock lock(peers_mtx, defer_lock);
 
     /* add server_a to peers */
+    lock.lock();
     peers.emplace(server_a);
+    lock.unlock();
 
     /* try to register with server */
     Packet req(my_addr, server_a, PacketType::REGISTER);
@@ -204,9 +215,11 @@ public:
     cout << "Node.recv(" << resp << ")" << endl;
     assert(resp.hdr.type == PacketType::OK);
 
-    IpV4Addr *ips = (IpV4Addr *)resp.data.ptr;
+    IpV4Addr *ips = (IpV4Addr *)resp.data.ptr();
     int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
+    lock.lock();
     peers.insert(ips, ips + n_addrs);
+    lock.unlock();
     print_peers();
   }
 
@@ -215,27 +228,40 @@ public:
    */
   const set<IpV4Addr> &cluster() const { return peers; }
 
-  bool send_data_to_cluster(sized_ptr<uint8_t> data) {
-    shared_lock lock(peers_mtx);
-    bool success = true;
-    for (auto peer : peers) {
-      /* skip self */
-      if (peer == my_addr)
-        continue;
+  bool send_cmd_to_cluster(const Command &cmd) const {
+    WriteCursor wc;
+    cmd.serialize(wc);
 
-      Packet req(my_addr, peer, PacketType::DATA, data.len, data.ptr);
-      const Packet resp = DataSock::fetch(req);
+    shared_lock lock(peers_mtx);
+    /* allocate storage for placement-new */
+    uint8_t storage[peers.size() * sizeof(Packet)]; // approx 1 packet per peer
+    Packet *pkts_to_send = reinterpret_cast<Packet *>(storage);
+    int num_pkts = 0;
+    for (IpV4Addr peer : peers) {
+      /* skip self */
+      if (peer != my_addr) {
+        /* construct Packet in-place in allocated storage */
+        new (pkts_to_send + num_pkts++)
+            Packet(my_addr, peer, PacketType::DATA, wc);
+      }
+    }
+    lock.unlock(); // try to avoid locking while doing networking
+
+    bool success = true;
+    for (int i = 0; i < num_pkts; i++) {
+      const Packet resp = DataSock::fetch(pkts_to_send[i]);
       cout << "Node.recv(" << resp << ")" << endl;
       success = success && resp.ok();
     }
     return success;
   }
 
-  DataChunk send_data(const IpV4Addr &dest, sized_ptr<uint8_t> data,
-                      uint8_t *buf = nullptr) {
-    Packet req(my_addr, dest, PacketType::DATA, data.len, data.ptr);
+  DataChunk send_cmd(const IpV4Addr &dest, const Command &cmd) const {
+    WriteCursor wc;
+    cmd.serialize(wc);
+    Packet req(my_addr, dest, PacketType::DATA, wc);
     Packet resp = DataSock::fetch(req);
     cout << "Node.recv(" << resp << ")" << endl;
-    return DataChunk(resp.data);
+    return DataChunk(move(resp.data));
   }
 };

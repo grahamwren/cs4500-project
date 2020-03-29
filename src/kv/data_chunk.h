@@ -1,45 +1,63 @@
 #pragma once
 
 #include "sized_ptr.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 
-class DataChunk : public sized_ptr<uint8_t> {
+/**
+ * an implementation of sized_ptr that owns it's data
+ */
+class DataChunk {
+private:
+  sized_ptr<uint8_t> _data;
+
 public:
-  DataChunk(int n, uint8_t *b) : sized_ptr(n, new uint8_t[n]) {
-    if (b)
-      memcpy(ptr, b, len);
+  DataChunk() : _data(0, nullptr) {}
+  DataChunk(int n, uint8_t *b) : _data(n, new uint8_t[n]) {
+    if (b) {
+      memcpy(_data.ptr, b, _data.len);
+    }
   }
-  DataChunk() : DataChunk(0, nullptr) {}
-  DataChunk(sized_ptr<uint8_t> sp) : DataChunk(sp.len, sp.ptr) {}
-  DataChunk(const DataChunk &dc) : DataChunk(dc.len, dc.ptr) {}
-  DataChunk(DataChunk &&c) : DataChunk(c.len, c.ptr) { c.ptr = nullptr; }
+
+  /* allow copy from sized_ptr */
+  DataChunk(const sized_ptr<uint8_t> &sp) : DataChunk(sp.len, sp.ptr) {}
   DataChunk(ReadCursor &c) : DataChunk(yield<sized_ptr<uint8_t>>(c)) {}
-  ~DataChunk() { delete[] ptr; }
+
+  /* disallow copy from DataChunk */
+  DataChunk(const DataChunk &dc) = delete;
+
+  DataChunk(DataChunk &&c) : _data(c.len(), c.ptr()) {
+    c._data.len = 0;
+    c._data.ptr = nullptr;
+  }
+  ~DataChunk() { delete[] ptr(); }
 
   DataChunk &operator=(DataChunk &&other) {
-    len = other.len;
-    delete[] ptr;
-    ptr = other.ptr;
-    other.ptr = nullptr;
+    _data.len = other.len();
+    other._data.len = 0;
+
+    _data.ptr = other.ptr();
+    other._data.ptr = nullptr;
     return *this;
   }
 
-  void serialize(WriteCursor &c) const { pack(c, (sized_ptr<uint8_t>)*this); }
+  const sized_ptr<uint8_t> &data() const { return _data; }
+  int len() const { return _data.len; }
+  uint8_t *ptr() const { return _data.ptr; }
+
+  uint8_t operator[](int i) const { return _data[i]; }
+
+  void serialize(WriteCursor &c) const { pack(c, _data); }
+
+  bool operator==(const DataChunk &other) const {
+    return len() == other.len() &&
+           std::equal(ptr(), ptr() + len(), other.ptr());
+  }
 };
 
 ostream &operator<<(ostream &output, const DataChunk &dc) {
-  output << "data: [";
-  char buf[10];
-  if (dc.len) {
-    sprintf(buf, "0x%x", dc[0]);
-    output << buf;
-  }
-  for (int i = 1; i < dc.len; i++) {
-    sprintf(buf, ",0x%x", dc[i]);
-    output << buf;
-  }
-  output << "]";
+  output << dc.data();
   return output;
 }

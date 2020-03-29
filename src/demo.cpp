@@ -1,6 +1,6 @@
 #include "application.h"
 
-static int NE = 1000;
+static int NE = 100;
 
 class Demo : public Application {
 public:
@@ -22,13 +22,15 @@ public:
       DataChunk data(wc.length(), wc.bytes());
       kv.put(k, data);
     }
-    for (int i = 0; i < NE; i++) {
-      ChunkKey k(string("main"), i);
-      DataChunk data = kv.get(k);
-      ReadCursor rc(data);
+    for (int i = 0; i < NE * 2; i++) {
+      /* request each item twice to test cache */
+      int index = i / 2;
+      ChunkKey k(string("main"), index);
+      const DataChunk &data = kv.get(k);
+      ReadCursor rc(data.data());
       string s = yield<string>(rc);
-      if (s.compare(strs[i]) != 0) {
-        cout << "Failed on: " << strs[i].c_str() << endl;
+      if (s.compare(strs[index]) != 0) {
+        cout << "Failed on: " << strs[index].c_str() << endl;
         exit(-1);
       }
     }

@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <tuple>
 
 template <typename E> struct sized_ptr {
@@ -32,3 +33,24 @@ template <typename E> struct sized_ptr {
     return *ptr;
   }
 };
+
+inline void interpret_byte(std::ostream &output, uint8_t byte) {
+  if (32 <= byte && byte <= 126)
+    output << (char)byte;
+  else
+    output << (uint32_t)byte;
+}
+
+inline std::ostream &operator<<(std::ostream &output,
+                                const sized_ptr<uint8_t> &sp) {
+  output << "{ " << sp.len << ", [";
+  if (sp.len) {
+    interpret_byte(output, sp[0]);
+  }
+  for (int i = 1; i < sp.len; i++) {
+    output << ",";
+    interpret_byte(output, sp[i]);
+  }
+  output << "] }";
+  return output;
+}

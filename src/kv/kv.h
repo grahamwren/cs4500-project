@@ -2,12 +2,12 @@
 
 #include "chunk_key.h"
 #include "command.h"
-#include "data_cache.h"
 #include "data_chunk.h"
+#include "lru_cache.h"
 #include "network/node.h"
 #include <iostream>
-#include <map>
 #include <shared_mutex>
+#include <unordered_map>
 
 using namespace std;
 
@@ -16,7 +16,7 @@ private:
   Node node;
 
   mutable shared_mutex om_mtx;
-  map<string, IpV4Addr> ownership_mapping;
+  unordered_map<string, IpV4Addr> ownership_mapping;
 
   /**
    * get the owner for this named data
@@ -38,37 +38,31 @@ private:
    */
   void put_owner(const string &name, IpV4Addr owner) {
     unique_lock lock(om_mtx);
-    ownership_mapping.emplace(make_pair(name, owner));
+    ownership_mapping.emplace(name, owner);
   }
 
   mutable shared_mutex data_mtx;
-  map<ChunkKey, DataChunk> data;
+  unordered_map<ChunkKey, shared_ptr<DataChunk>> data;
 
   /**
    * get data chunk for this key
    * Uses shared_lock on data_mtx
    */
-  optional<reference_wrapper<const DataChunk>>
-  get_data(const ChunkKey &key) const {
+  weak_ptr<DataChunk> get_data(const ChunkKey &key) const {
     shared_lock lock(data_mtx);
-    auto it = data.find(key);
-    if (it == data.end()) {
-      return nullopt;
-    } else {
-      return it->second;
-    }
+    return weak_ptr<DataChunk>(data.at(key));
   }
 
   /**
    * put data chunk for this key
    * Uses unique_lock on data_mtx
    */
-  void put_data(const ChunkKey key, sized_ptr<uint8_t> dc) {
+  void put_data(const ChunkKey key, const sized_ptr<uint8_t> &data_sp) {
     unique_lock lock(data_mtx);
-    data.emplace(key, dc);
+    data.emplace(key, shared_ptr<DataChunk>(new DataChunk(data_sp)));
   }
 
-  mutable DataCache data_cache;
+  mutable LRUCache<ChunkKey, DataChunk> cache;
 
 protected:
   /**
@@ -87,12 +81,8 @@ protected:
   }
 
   optional<sized_ptr<uint8_t>> handle_get_cmd(IpV4Addr src, const Command &c) {
-    auto dc = get_data(c.key);
-    if (dc) {
-      return dc->get().data();
-    } else {
-      return nullopt;
-    }
+    shared_ptr<DataChunk> dc = get_data(c.key).lock();
+    return dc->data();
   }
   optional<sized_ptr<uint8_t>> handle_put_cmd(IpV4Addr src, const Command &c) {
     put_data(c.key, c.data.data());
@@ -144,13 +134,8 @@ public:
   /**
    * application interface
    */
-  const DataChunk &get(const ChunkKey &k) const {
+  weak_ptr<DataChunk> get(const ChunkKey &k) const {
     cout << "KV.get(" << k << ")" << endl;
-    if (data_cache.has_key(k)) {
-      cout << "KV.cache_hit(" << k << ", " << data_cache.get(k) << ")" << endl;
-      return data_cache.get(k);
-    }
-
     /* find peer who owns this DF */
     optional<IpV4Addr> addr = find_peer_for_chunk(k);
     /* assert addr found */
@@ -158,14 +143,13 @@ public:
 
     /* if this node owns the chunk */
     if (*addr == node.addr()) {
-      auto chunk = get_data(k);
-      assert(chunk);
-      return chunk->get();
+      return get_data(k);
     } else {
-      Command get_cmd(k);
-      cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
-      data_cache.insert(k, node.send_cmd(*addr, get_cmd));
-      return data_cache.get(k);
+      return cache.fetch(k, [&, this](const ChunkKey &key) {
+        Command get_cmd(k);
+        cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
+        return node.send_cmd(*addr, get_cmd);
+      });
     }
   }
 

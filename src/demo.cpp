@@ -26,8 +26,8 @@ public:
       /* request each item twice to test cache */
       int index = i / 2;
       ChunkKey k(string("main"), index);
-      const DataChunk &data = kv.get(k);
-      ReadCursor rc(data.data());
+      shared_ptr<DataChunk> data = kv.get(k).lock();
+      ReadCursor rc(data->data());
       string s = yield<string>(rc);
       if (s.compare(strs[index]) != 0) {
         cout << "Failed on: " << strs[index].c_str() << endl;

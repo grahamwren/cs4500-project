@@ -63,8 +63,7 @@ public:
     /* create and setup sockaddr */
     struct sockaddr_in address = get_addr(addr);
 
-    /* connect socket, use assert to handle error case */
-
+    /* connect socket */
     int cres = ::connect(sock_fd, (struct sockaddr *)&address, sizeof(address));
     if (cres < 0) {
       cout << "ERROR: failed to connect " << (int)errno << endl;

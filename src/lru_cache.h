@@ -46,10 +46,11 @@ private:
   bool has(const key_t &k) const { return cache.find(k) != cache.end(); }
 
   /**
-   * get a weak_ptr to a value stored in the cache
+   * get a weak_ptr to a value stored in the cache, assumes key is in cache
    */
   weak_ptr<value_t> get_from_cache(const key_t &key) {
-    auto it = find(keys.begin(), keys.end(), key);
+    auto it = find_if(keys.begin(), keys.end(),
+                      [&, key](auto k) { return k.get() == key; });
     assert(it != keys.end()); // assert found value
 
     if (it != keys.begin()) {

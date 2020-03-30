@@ -126,31 +126,28 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
  */
 class Packet {
 public:
-  PacketHeader hdr; // 20 bytes
-  DataChunk data;   // owned
-
-  /* explicity delete copy and move constructors to ensure copy-elision */
-  Packet(Packet &&) = delete;
-  Packet(const Packet &) = delete;
+  PacketHeader hdr;           // 20 bytes
+  unique_ptr<DataChunk> data; // OWNED
 
   // build on receive
-  Packet(const PacketHeader &h) : hdr(h) {}
+  Packet(const PacketHeader &h) : hdr(h), data(new DataChunk) {}
   Packet(const PacketHeader &h, uint8_t *src_data)
-      : hdr(h), data(hdr.data_len(), src_data) {}
+      : hdr(h), data(new DataChunk(hdr.data_len(), src_data)) {}
 
   // build to send
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
-      : hdr(src, dst, sizeof(PacketHeader), type) {}
+      : hdr(src, dst, sizeof(PacketHeader), type), data(new DataChunk) {}
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type,
          const sized_ptr<uint8_t> &d)
-      : hdr(src, dst, d.len + sizeof(PacketHeader), type), data(d) {}
+      : hdr(src, dst, d.len + sizeof(PacketHeader), type),
+        data(new DataChunk(d)) {}
 
   /**
    * write the bytes representation of this Packet into the given buffer
    */
   void pack(uint8_t *buf) const {
     hdr.pack(buf);
-    memcpy(buf + sizeof(PacketHeader), data.ptr(), data.len());
+    memcpy(buf + sizeof(PacketHeader), data->ptr(), data->len());
   }
 
   bool ok() const { return hdr.type == PacketType::OK; }
@@ -201,6 +198,6 @@ ostream &operator<<(ostream &output, const PacketHeader &hdr) {
 
 ostream &operator<<(ostream &output, const Packet &pkt) {
   output << "Packet<" << (void *)&pkt << ">(header: " << pkt.hdr
-         << ", data: " << pkt.data << ")";
+         << ", data: " << *(pkt.data) << ")";
   return output;
 }

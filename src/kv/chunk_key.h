@@ -40,3 +40,9 @@ ostream &operator<<(ostream &output, const ChunkKey &k) {
   output << "{ name: " << k.name.c_str() << ", idx: " << k.chunk_idx << " }";
   return output;
 }
+
+template <> struct hash<ChunkKey> {
+  size_t operator()(const ChunkKey &key) const noexcept {
+    return hash<string>{}(key.name) ^ (hash<int>{}(key.chunk_idx) << 1);
+  }
+};

@@ -81,7 +81,7 @@ docker_net_valgrind: docker_install
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
 	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/demo.exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
 
-run_network: DEBUG=true
+run_network: CCOPTS=$(FAST_CCOPTS)
 run_network: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)

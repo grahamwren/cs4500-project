@@ -11,13 +11,13 @@ public:
   enum Type : uint8_t { GET, PUT, OWN };
 
   const Type type;
-  ChunkKey key;   // <------+-- get
-  DataChunk data; //     <--+-- put
-  string name;    // <-- own
+  ChunkKey key;               // <------+-- get
+  unique_ptr<DataChunk> data; //     <--+-- put
+  string name;                // <-- own
 
   Command(const ChunkKey &k) : type(Type::GET), key(k) {}
-  Command(const ChunkKey &k, const DataChunk &dc)
-      : type(Type::PUT), key(k), data(dc.data()) {}
+  Command(const ChunkKey &k, unique_ptr<DataChunk> &&dc)
+      : type(Type::PUT), key(k), data(move(dc)) {}
   Command(const string &ns) : type(Type::OWN), name(ns) {}
   Command(ReadCursor &c) : type(yield<Type>(c)) {
     switch (type) {
@@ -26,7 +26,7 @@ public:
       break;
     case Type::PUT:
       key = ChunkKey(c);
-      data = DataChunk(c);
+      data = unique_ptr<DataChunk>(new DataChunk(c));
       break;
     case Type::OWN:
       name = yield<string>(c);
@@ -46,7 +46,7 @@ public:
       break;
     case Type::PUT:
       key.serialize(wc);
-      data.serialize(wc);
+      data->serialize(wc);
       break;
     case Type::OWN:
       pack<const string &>(wc, name);
@@ -60,7 +60,8 @@ public:
       case Type::GET:
         return key == other.key;
       case Type::PUT:
-        return key == other.key && data == other.data;
+        assert(data && other.data);
+        return key == other.key && *data == *other.data;
       case Type::OWN:
         return name.compare(other.name) == 0;
       }
@@ -92,7 +93,8 @@ ostream &operator<<(ostream &output, const Command &cmd) {
     output << cmd.key;
     break;
   case Command::Type::PUT:
-    output << "key: " << cmd.key << ", data: " << cmd.data;
+    assert(cmd.data);
+    output << "key: " << cmd.key << ", data: " << *cmd.data;
     break;
   case Command::Type::OWN:
     output << "name: " << cmd.name.c_str();

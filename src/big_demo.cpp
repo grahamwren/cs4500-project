@@ -29,30 +29,50 @@ public:
 
   void run() {
     int bytes_to_write = 0;
-    vector<DataChunk> data_to_send;
+    vector<unique_ptr<DataChunk>> data_to_send;
     data_to_send.reserve(NE);
     for (int i = 0; i < NE; i++) {
       WriteCursor wc;
       pack<const string &>(wc, strs[i]);
-      data_to_send.emplace_back(wc.length(), wc.bytes());
+      DataChunk *dc = new DataChunk(wc.length(), wc.bytes());
+      data_to_send.emplace_back(unique_ptr<DataChunk>(dc));
       bytes_to_write += wc.length();
     }
     cout << "writing: " << bytes_to_write << endl;
 
+    write_data(data_to_send);
+
+    vector<shared_ptr<DataChunk>> results;
+    results.reserve(NE);
+    read_data(results);
+
+    for (int i = 0; i < NE; i++) {
+      shared_ptr<DataChunk> data = results[i];
+      ReadCursor rc(data->data());
+      string s = yield<string>(rc);
+      if (s.compare(strs[i]) != 0) {
+        cout << "Failed on: " << strs[i].c_str() << endl;
+        exit(-1);
+      }
+    }
+    cout << "Full data match, DONE" << endl;
+  }
+
+  void write_data(vector<unique_ptr<DataChunk>> &data_to_send) {
     /* write elements into cluster */
     auto w_start = chrono::high_resolution_clock::now();
     int i = 0;
-    for (const DataChunk &dc : data_to_send) {
+    for (unique_ptr<DataChunk> &dc : data_to_send) {
       ChunkKey k(data_name, i++);
-      kv.put(k, dc);
+      kv.put(k, move(dc));
     }
     auto w_end = chrono::high_resolution_clock::now();
     chrono::duration<double, milli> w_diff = w_end - w_start;
     cout << "write time: " << w_diff.count() << " ms, " << NE << " elements"
          << endl;
+  }
 
-    vector<shared_ptr<DataChunk>> results;
-    results.reserve(NE);
+  void read_data(vector<shared_ptr<DataChunk>> &results) {
     auto r_start = chrono::high_resolution_clock::now();
     for (int i = 0; i < NE; i++) {
       ChunkKey key(data_name, i);
@@ -68,17 +88,6 @@ public:
     chrono::duration<double, milli> r_diff = r_end - r_start;
     cout << "read time: " << r_diff.count() << " ms, " << NE
          << " elements, each 10 times" << endl;
-
-    for (int i = 0; i < NE; i++) {
-      shared_ptr<DataChunk> data = results[i];
-      ReadCursor rc(data->data());
-      string s = yield<string>(rc);
-      if (s.compare(strs[i]) != 0) {
-        cout << "Failed on: " << strs[i].c_str() << endl;
-        exit(-1);
-      }
-    }
-    cout << "Full data match, DONE" << endl;
   }
 };
 

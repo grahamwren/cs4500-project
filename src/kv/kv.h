@@ -61,9 +61,9 @@ private:
    * put data chunk for this key
    * Uses unique_lock on data_mtx
    */
-  void put_data(const ChunkKey key, const sized_ptr<uint8_t> &data_sp) {
+  void put_data(const ChunkKey key, unique_ptr<DataChunk> &&data_up) {
     unique_lock lock(data_mtx);
-    data.emplace(key, shared_ptr<DataChunk>(new DataChunk(data_sp)));
+    data.emplace(key, shared_ptr<DataChunk>(move(data_up)));
   }
 
   mutable LRUCache<ChunkKey, DataChunk> cache;
@@ -72,7 +72,7 @@ protected:
   /**
    * invoked by node, in seperate thread
    */
-  optional<sized_ptr<uint8_t>> handler(IpV4Addr src, const Command &c) {
+  optional<sized_ptr<uint8_t>> handler(IpV4Addr src, Command &c) {
     if (KV_LOG)
       cout << "KV.asyncRecv(" << src << ", " << c << ")" << endl;
     switch (c.type) {
@@ -89,8 +89,8 @@ protected:
     shared_ptr<DataChunk> dc = get_data(c.key).lock();
     return dc->data();
   }
-  optional<sized_ptr<uint8_t>> handle_put_cmd(IpV4Addr src, const Command &c) {
-    put_data(c.key, c.data.data());
+  optional<sized_ptr<uint8_t>> handle_put_cmd(IpV4Addr src, Command &c) {
+    put_data(c.key, move(c.data));
     return sized_ptr<uint8_t>(0, nullptr);
   }
   optional<sized_ptr<uint8_t>> handle_own_cmd(IpV4Addr src, const Command &c) {
@@ -162,9 +162,9 @@ public:
     }
   }
 
-  void put(const ChunkKey &k, const DataChunk &dc) {
+  void put(const ChunkKey &k, unique_ptr<DataChunk> &&dc) {
     if (KV_LOG)
-      cout << "KV.put(" << k << ", " << dc << ")" << endl;
+      cout << "KV.put(" << k << ", " << *dc << ")" << endl;
     /* check if someone already owns this DF */
     optional<IpV4Addr> addr = find_peer_for_chunk(k);
     /* if not, claim ownership */
@@ -183,9 +183,9 @@ public:
 
     /* if this node owns the chunk */
     if (*addr == node.addr()) {
-      put_data(k, dc.data());
+      put_data(k, move(dc));
     } else {
-      Command put_cmd(k, dc);
+      Command put_cmd(k, move(dc));
       if (KV_LOG)
         cout << "KV.send(" << *addr << ", " << put_cmd << ")" << endl;
       node.send_cmd(*addr, put_cmd);

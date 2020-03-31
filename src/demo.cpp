@@ -20,8 +20,8 @@ public:
       ChunkKey k(data_name, i);
       WriteCursor wc;
       pack<const string &>(wc, strs[i]);
-      DataChunk data(wc.length(), wc.bytes());
-      kv.put(k, data);
+      DataChunk *dc = new DataChunk(wc.length(), wc.bytes());
+      kv.put(k, unique_ptr<DataChunk>(dc));
     }
     for (int i = 0; i < NE * 2; i++) {
       /* request each item twice to test cache */

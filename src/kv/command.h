@@ -11,13 +11,9 @@ public:
   enum Type : uint8_t { GET, PUT, OWN };
 
   const Type type;
-  union {
-    struct {          // <------+
-      ChunkKey key;   // <------|-- get
-      DataChunk data; //        +-- put
-    };                // <------+
-    string name;      // <-- own
-  };
+  ChunkKey key;   // <------+-- get
+  DataChunk data; //     <--+-- put
+  string name;    // <-- own
 
   Command(const ChunkKey &k) : type(Type::GET), key(k) {}
   Command(const ChunkKey &k, const DataChunk &dc)
@@ -41,8 +37,6 @@ public:
       assert(false); // unknown type/malformed bytes
     }
   }
-
-  ~Command() {}
 
   void serialize(WriteCursor &wc) const {
     pack(wc, type);

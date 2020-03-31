@@ -20,7 +20,7 @@ run: build
 
 build: $(BUILD_DIR)/example.exe
 
-valgrind: docker_valgrind
+valgrind: docker_net_valgrind
 
 test: FORCE
 	cd test && make
@@ -57,9 +57,6 @@ bench: clean $(BUILD_DIR)/bench.exe
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_8.sor
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_9.sor
 
-native_valgrind: $(BUILD_DIR)/example.exe
-	valgrind --leak-check=yes $(BUILD_DIR)/example.exe datafile.sor
-
 clean:
 	rm -rf build/[!.]*
 
@@ -78,18 +75,15 @@ define docker_net_start
 	docker run -tid --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
-docker_valgrind: docker_install
-	$(call docker_run, make clean build)
-	$(call docker_run, make native_valgrind)
+docker_net_valgrind: DEBUG=true
+docker_net_valgrind: docker_install
+	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
+	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/demo.exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
 
-# best to run this as:
-# $ make run_network |
-#     egrep "^\w+$" |
-#     tee cont_hashs.ignore_me &&
-#     cat cont_hashs.ignore_me |
-#     xargs -t -n1 docker logs
+run_network: DEBUG=true
 run_network: docker_install
-	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe)
+	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)

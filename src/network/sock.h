@@ -92,7 +92,7 @@ public:
    *
    * Returns empty optional if checksum invalid
    */
-  const Packet get_pkt() const {
+  Packet get_pkt() const {
     uint8_t hdr_buf[sizeof(PacketHeader)];
     int rres = recv(sock_fd, hdr_buf, sizeof(PacketHeader), MSG_WAITALL);
     assert(rres != -1);
@@ -113,7 +113,7 @@ public:
     }
   };
 
-  static const Packet fetch(const Packet &pkt) {
+  static Packet fetch(const Packet &pkt) {
     DataSock ds(pkt.hdr.dst_addr);
     ds.connect();
     ds.send_pkt(pkt);

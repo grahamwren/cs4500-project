@@ -70,7 +70,7 @@ define docker_run
 endef
 
 define docker_net_run
-	docker run -ti --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
+	docker run -ti --cap-add sys_admin --network clients-project --ip $(2) -v `pwd`:/eau2 $(CONT_NAME) bash -c 'cd /eau2; $(1)'
 endef
 
 # starts this command in a container and then detaches
@@ -94,6 +94,17 @@ run_network: docker_install
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
+
+run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false
+run_perf: APP=big_demo
+run_perf: docker_install
+	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
+	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
+	$(call docker_net_run, perf record -F 99 -a -g -- ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
+	$(call docker_run, perf script > out.stacks)
+	cd ~/FlameGraph; ./stackcollapse-perf.pl out.stacks > out.folded
+	cd ~/FlameGraph; ./flamegraph.pl out.folded > out.svg
+	open ~/FlameGraph/out.svg -a Google\ Chrome.app
 
 docker_install: docker_clean Dockerfile
 	docker build -t $(CONT_NAME) .

@@ -15,6 +15,10 @@
 
 using namespace std;
 
+#ifndef NODE_LOG
+#define NODE_LOG true
+#endif
+
 /**
  * a class which handles network communication for an application which extends
  * it
@@ -35,10 +39,12 @@ protected:
 
   void run() {
     while (should_continue) {
-      cout << "waiting for packet..." << endl;
+      if (NODE_LOG)
+        cout << "waiting for packet..." << endl;
       const DataSock ds = listen_s.accept_connection();
       const Packet pkt = ds.get_pkt();
-      cout << "Node.asyncRecv(" << pkt << ")" << endl;
+      if (NODE_LOG)
+        cout << "Node.asyncRecv(" << pkt << ")" << endl;
       handle_pkt(ds, pkt);
       check_if_new_peer(pkt.hdr.src_addr);
     }
@@ -53,8 +59,10 @@ protected:
 
     peers.emplace(ip);
 
-    cout << "New peer(" << ip << ") ";
-    print_peers();
+    if (NODE_LOG) {
+      cout << "New peer(" << ip << ") ";
+      print_peers();
+    }
 
     /* notify peers of new peer */
     vector<Packet> pkts_to_send;
@@ -179,6 +187,8 @@ protected:
   }
 
   void print_peers() const {
+    if (!NODE_LOG)
+      return;
     cout << "Peers[";
     auto it = peers.begin();
     if (it != peers.end())
@@ -190,7 +200,7 @@ protected:
   }
 
 public:
-  Node(IpV4Addr a)
+  Node(const IpV4Addr &a)
       : should_continue(true), my_addr(a), listen_s(a),
         data_handler([](IpV4Addr src, ReadCursor &rc) {
           return sized_ptr<uint8_t>(0, nullptr);
@@ -217,12 +227,14 @@ public:
 
     for (const Packet &pkt : pkts_to_send) {
       const Packet resp = DataSock::fetch(pkt);
-      cout << "Node.recv(" << resp << ")" << endl;
+      if (NODE_LOG)
+        cout << "Node.recv(" << resp << ")" << endl;
       if (resp.hdr.type != PacketType::OK) {
         cout << "ERROR: failed to shutdown peer: " << pkt.hdr.dst_addr << endl;
       }
     }
-    cout << "killed cluster" << endl;
+    if (NODE_LOG)
+      cout << "killed cluster" << endl;
   }
 
   void register_with(const IpV4Addr &server_a) {
@@ -237,7 +249,8 @@ public:
     /* try to register with server */
     Packet req(my_addr, server_a, PacketType::REGISTER);
     const Packet resp = DataSock::fetch(req);
-    cout << "Node.recv(" << resp << ")" << endl;
+    if (NODE_LOG)
+      cout << "Node.recv(" << resp << ")" << endl;
 
     assert(resp.hdr.type == PacketType::OK);
 
@@ -275,7 +288,8 @@ public:
     bool success = true;
     for (int i = 0; i < num_pkts; i++) {
       const Packet resp = DataSock::fetch(pkts_to_send[i]);
-      cout << "Node.recv(" << resp << ")" << endl;
+      if (NODE_LOG)
+        cout << "Node.recv(" << resp << ")" << endl;
       success = success && resp.ok();
     }
     return success;
@@ -287,7 +301,8 @@ public:
     cmd.serialize(wc);
     Packet req(my_addr, dest, PacketType::DATA, wc);
     Packet resp = DataSock::fetch(req);
-    cout << "Node.recv(" << resp << ")" << endl;
+    if (NODE_LOG)
+      cout << "Node.recv(" << resp << ")" << endl;
     return move(resp.data);
   }
 };

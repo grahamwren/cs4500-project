@@ -6,7 +6,8 @@ class Demo : public Application {
 public:
   const string data_name;
   vector<string> strs;
-  Demo(IpV4Addr ip, IpV4Addr sip) : Application(ip, sip), data_name("main") {
+  Demo(const IpV4Addr &ip, const IpV4Addr &sip)
+      : Application(ip, sip), data_name("main") {
     char buf[1024];
     for (int i = 0; i < NE; i++) {
       sprintf(buf, "Hello world %d", i);

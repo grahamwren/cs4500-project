@@ -15,6 +15,10 @@ using namespace std;
 #define PROTO_PORT 1080
 #endif
 
+#ifndef SOCK_LOG
+#define SOCK_LOG true
+#endif
+
 /**
  * a class to encapsulate a socket handle
  * authors: @grahamwren @jagen31
@@ -63,6 +67,8 @@ public:
     /* create and setup sockaddr */
     struct sockaddr_in address = get_addr(addr);
 
+    if (SOCK_LOG)
+      cout << "DataSock.connect(" << addr << ")" << endl;
     /* connect socket */
     int cres = ::connect(sock_fd, (struct sockaddr *)&address, sizeof(address));
     if (cres < 0) {
@@ -75,7 +81,8 @@ public:
    * send a Packet over this DataSock
    */
   int send_pkt(const Packet &pkt) const {
-    cout << "DataSock.send(" << pkt << ")" << endl;
+    if (SOCK_LOG)
+      cout << "DataSock.send(" << pkt << ")" << endl;
 
     uint8_t buffer[pkt.hdr.pkt_len];
     pkt.pack(buffer);
@@ -161,6 +168,8 @@ public:
    */
   const DataSock accept_connection() const {
     int data_sock_fd = accept(sock_fd, 0, 0);
+    if (SOCK_LOG)
+      cout << "ListenSock.accept(" << addr << ")" << endl;
     assert(data_sock_fd != -1);
     return DataSock(data_sock_fd, addr);
   }

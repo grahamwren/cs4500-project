@@ -11,6 +11,10 @@
 
 using namespace std;
 
+#ifndef KV_LOG
+#define KV_LOG true
+#endif
+
 class KV {
 private:
   Node node;
@@ -69,7 +73,8 @@ protected:
    * invoked by node, in seperate thread
    */
   optional<sized_ptr<uint8_t>> handler(IpV4Addr src, const Command &c) {
-    cout << "KV.asyncRecv(" << src << ", " << c << ")" << endl;
+    if (KV_LOG)
+      cout << "KV.asyncRecv(" << src << ", " << c << ")" << endl;
     switch (c.type) {
     case Command::Type::GET:
       return handle_get_cmd(src, c);
@@ -121,21 +126,24 @@ protected:
   }
 
 public:
-  KV(IpV4Addr a) : node(a) {
+  KV(const IpV4Addr &a) : node(a) {
     node.set_data_handler([&](IpV4Addr src, ReadCursor &c) {
       Command cmd(c);
       return this->handler(src, cmd);
     });
     node.start();
   }
-  KV(IpV4Addr a, IpV4Addr server_a) : KV(a) { node.register_with(server_a); }
+  KV(const IpV4Addr &a, const IpV4Addr &server_a) : KV(a) {
+    node.register_with(server_a);
+  }
   ~KV() { node.join(); }
 
   /**
    * application interface
    */
   weak_ptr<DataChunk> get(const ChunkKey &k) const {
-    cout << "KV.get(" << k << ")" << endl;
+    if (KV_LOG)
+      cout << "KV.get(" << k << ")" << endl;
     /* find peer who owns this DF */
     optional<IpV4Addr> addr = find_peer_for_chunk(k);
     /* assert addr found */
@@ -147,14 +155,16 @@ public:
     } else {
       return cache.fetch(k, [&, this](const ChunkKey &key) {
         Command get_cmd(k);
-        cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
+        if (KV_LOG)
+          cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
         return node.send_cmd(*addr, get_cmd);
       });
     }
   }
 
   void put(const ChunkKey &k, const DataChunk &dc) {
-    cout << "KV.put(" << k << ", " << dc << ")" << endl;
+    if (KV_LOG)
+      cout << "KV.put(" << k << ", " << dc << ")" << endl;
     /* check if someone already owns this DF */
     optional<IpV4Addr> addr = find_peer_for_chunk(k);
     /* if not, claim ownership */
@@ -162,7 +172,8 @@ public:
       addr = node.addr();
       put_owner(k.name, node.addr());
       Command own_cmd(k.name);
-      cout << "KV.send(all, " << own_cmd << ")" << endl;
+      if (KV_LOG)
+        cout << "KV.send(all, " << own_cmd << ")" << endl;
 
       WriteCursor wc;
       own_cmd.serialize(wc);
@@ -175,7 +186,8 @@ public:
       put_data(k, dc.data());
     } else {
       Command put_cmd(k, dc);
-      cout << "KV.send(" << *addr << ", " << put_cmd << ")" << endl;
+      if (KV_LOG)
+        cout << "KV.send(" << *addr << ", " << put_cmd << ")" << endl;
       node.send_cmd(*addr, put_cmd);
     }
   }

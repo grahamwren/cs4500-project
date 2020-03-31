@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 
 /**
  * an implementation of sized_ptr that owns it's data
@@ -15,6 +16,7 @@ private:
 
 public:
   DataChunk() : _data(0, nullptr) {}
+  DataChunk(int n, unique_ptr<uint8_t> &&b) : _data(n, b.release()) {}
   DataChunk(int n, uint8_t *b) : _data(n, new uint8_t[n]) {
     if (b) {
       memcpy(_data.ptr, b, _data.len);

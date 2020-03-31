@@ -47,9 +47,12 @@ inline std::ostream &operator<<(std::ostream &output,
   if (sp.len) {
     interpret_byte(output, sp[0]);
   }
-  for (int i = 1; i < sp.len; i++) {
+  for (int i = 1; i < sp.len && i < 20; i++) {
     output << ",";
     interpret_byte(output, sp[i]);
+  }
+  if (sp.len > 20) {
+    output << ", ... " << sp.len - 20 << " more bytes";
   }
   output << "] }";
   return output;

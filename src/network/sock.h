@@ -19,6 +19,10 @@ using namespace std;
 #define SOCK_LOG true
 #endif
 
+#ifndef MAX_DATA_SIZE
+#define MAX_DATA_SIZE 32768
+#endif
+
 /**
  * a class to encapsulate a socket handle
  * authors: @grahamwren @jagen31
@@ -84,12 +88,22 @@ public:
     if (SOCK_LOG)
       cout << "DataSock.send(" << pkt << ")" << endl;
 
-    uint8_t buffer[pkt.hdr.pkt_len];
-    pkt.pack(buffer);
-    size_t sres = send(sock_fd, buffer, pkt.hdr.pkt_len, 0);
-    if (sres == -1) {
-      cout << "ERROR: failed to send pkt " << (int)errno << endl;
+    /* send header first */
+    uint8_t buffer[sizeof(PacketHeader)];
+    pkt.hdr.pack(buffer);
+    size_t sres = send(sock_fd, buffer, sizeof(PacketHeader), 0);
+    if (sres == -1)
+      return sres; // failed
+
+    int sent_bytes = 0;
+    while (sent_bytes < pkt.hdr.data_len()) {
+      int send_len = fmin(MAX_DATA_SIZE, pkt.hdr.data_len() - sent_bytes);
+      sres = send(sock_fd, pkt.data->ptr() + sent_bytes, send_len, 0);
+      sent_bytes += send_len;
+      if (sres == -1)
+        return sres; // failed
     }
+
     return sres;
   };
 
@@ -109,12 +123,23 @@ public:
 
     PacketHeader &hdr = *hdr_ptr;
 
+    if (SOCK_LOG)
+      cout << "DataSock.recv_hdr(hdr: " << hdr << ")" << endl;
+
     if (hdr.data_len() > 0) {
-      uint8_t recv_buf[hdr.data_len()];
-      /* read data_len from socket, blocks until data_len has been read */
-      rres = recv(sock_fd, recv_buf, hdr.data_len(), MSG_WAITALL);
-      assert(rres != -1);
-      return Packet(hdr, recv_buf);
+      unique_ptr<uint8_t> recv_buf(new uint8_t[hdr.data_len()]);
+      int recv_bytes = 0;
+      while (recv_bytes < hdr.data_len()) {
+        int recv_len = fmin(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
+        rres =
+            recv(sock_fd, recv_buf.get() + recv_bytes, recv_len, MSG_WAITALL);
+        recv_bytes += recv_len;
+        assert(rres != -1);
+        if (SOCK_LOG)
+          cout << "DataSock.recv_data(" << recv_bytes << " out of "
+               << hdr.data_len() << ")" << endl;
+      }
+      return Packet(hdr, move(recv_buf));
     } else {
       return Packet(hdr);
     }

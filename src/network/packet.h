@@ -131,8 +131,8 @@ public:
 
   // build on receive
   Packet(const PacketHeader &h) : hdr(h), data(new DataChunk) {}
-  Packet(const PacketHeader &h, uint8_t *src_data)
-      : hdr(h), data(new DataChunk(hdr.data_len(), src_data)) {}
+  Packet(const PacketHeader &h, unique_ptr<uint8_t> &&src_data)
+      : hdr(h), data(new DataChunk(hdr.data_len(), move(src_data))) {}
 
   // build to send
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type)

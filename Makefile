@@ -34,6 +34,9 @@ $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
+$(BUILD_DIR)/big_demo.exe: $(SRC_DIR)/big_demo.cpp $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
+
 $(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
@@ -82,14 +85,15 @@ docker_net_valgrind: docker_install
 	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/demo.exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
 
 run_network: CCOPTS=$(FAST_CCOPTS)
+run_network: APP=demo
 run_network: docker_install
-	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
+	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
-	$(call docker_net_run, ./$(BUILD_DIR)/demo.exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
+	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.7 --server-ip 172.168.0.2, 172.168.0.7)
 
 docker_install: docker_clean Dockerfile
 	docker build -t $(CONT_NAME) .

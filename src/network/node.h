@@ -46,43 +46,7 @@ protected:
       if (NODE_LOG)
         cout << "Node.asyncRecv(" << pkt << ")" << endl;
       handle_pkt(ds, pkt);
-      check_if_new_peer(pkt.hdr.src_addr);
     }
-  }
-
-  bool check_if_new_peer(const IpV4Addr &ip) {
-    unique_lock lock(peers_mtx);
-
-    bool seen_peer = ip == my_addr || peers.find(ip) != peers.end();
-    if (seen_peer)
-      return false;
-
-    peers.emplace(ip);
-
-    if (NODE_LOG) {
-      cout << "New peer(" << ip << ") ";
-      print_peers();
-    }
-
-    /* notify peers of new peer */
-    vector<Packet> pkts_to_send;
-    pkts_to_send.reserve(peers.size());
-    for (IpV4Addr peer : peers) {
-      if (peer != my_addr) {
-        sized_ptr<uint8_t> d(sizeof(IpV4Addr), (uint8_t *)&ip);
-        pkts_to_send.emplace_back(
-            Packet(my_addr, peer, PacketType::NEW_PEER, d));
-      }
-    }
-
-    /* unlock before doing networking */
-    lock.unlock();
-
-    for (const Packet &pkt : pkts_to_send) {
-      const Packet resp = DataSock::fetch(pkt);
-      assert(resp.ok());
-    }
-    return true;
   }
 
   void handle_pkt(const DataSock &sock, const Packet &pkt) {
@@ -107,8 +71,8 @@ protected:
     }
   }
 
-  void handle_register_pkt(const DataSock &sock, const Packet &req) const {
-    shared_lock lock(peers_mtx);
+  void handle_register_pkt(const DataSock &sock, const Packet &req) {
+    shared_lock read_lock(peers_mtx);
     const IpV4Addr &src = req.hdr.src_addr;
     const int n_peers = peers.size();
     IpV4Addr ips[n_peers];
@@ -116,11 +80,43 @@ protected:
     for (auto peer : peers) {
       ips[i++] = peer;
     }
-    lock.unlock();
+    read_lock.unlock();
 
     sized_ptr<uint8_t> d(sizeof(IpV4Addr) * n_peers, (uint8_t *)ips);
     Packet resp(my_addr, src, PacketType::OK, d);
     sock.send_pkt(resp);
+
+    unique_lock write_lock(peers_mtx);
+
+    bool seen_peer = src == my_addr || peers.find(src) != peers.end();
+    if (seen_peer)
+      return;
+
+    peers.emplace(src);
+
+    if (NODE_LOG) {
+      cout << "New peer(" << src << ") ";
+      print_peers();
+    }
+
+    /* notify peers of new peer */
+    vector<Packet> pkts_to_send;
+    pkts_to_send.reserve(peers.size());
+    for (IpV4Addr peer : peers) {
+      if (peer != my_addr) {
+        sized_ptr<uint8_t> d(sizeof(IpV4Addr), (uint8_t *)&src);
+        pkts_to_send.emplace_back(
+            Packet(my_addr, peer, PacketType::NEW_PEER, d));
+      }
+    }
+
+    /* unlock before doing networking */
+    write_lock.unlock();
+
+    for (const Packet &pkt : pkts_to_send) {
+      const Packet resp = DataSock::fetch(pkt);
+      assert(resp.ok());
+    }
   }
 
   void handle_new_peer_pkt(const DataSock &sock, const Packet &req) {

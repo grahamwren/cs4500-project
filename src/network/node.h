@@ -30,7 +30,7 @@ public:
       handler_fn_t;
 
 protected:
-  std::atomic<bool> should_continue;
+  bool should_continue;
   const IpV4Addr my_addr;
   ListenSock listen_s;
   mutable shared_mutex peers_mtx;

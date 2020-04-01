@@ -126,8 +126,8 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
  */
 class Packet {
 public:
-  PacketHeader hdr;           // 20 bytes
-  unique_ptr<DataChunk> data; // OWNED
+  PacketHeader hdr; // 20 bytes
+  unique_ptr<DataChunk> data;
 
   // build on receive
   Packet(const PacketHeader &h) : hdr(h), data(new DataChunk) {}

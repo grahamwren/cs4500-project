@@ -99,6 +99,7 @@ protected:
       cout << "ERROR: node " << src << " claimed ownership for DF "
            << c.name.c_str() << " already owned by "
            << ownership_mapping.at(c.name) << endl;
+      return nullopt; // node returns an PacketType::ERR
     }
     return sized_ptr<uint8_t>(0, nullptr);
   }

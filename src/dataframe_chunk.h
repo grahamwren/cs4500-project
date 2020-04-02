@@ -1,5 +1,6 @@
 #pragma once
 
+#include "column.h"
 #include "data.h"
 #include "dataframe.h"
 #include <vector>
@@ -10,100 +11,127 @@
 
 using namespace std;
 
-class ChunkColumn {
-protected:
-  int len;
-  const Data::Type type;
-  const vector<Data> data;
-
-public:
-  ChunkColumn(Data::Type t) : type(t), data(DF_CHUNK_SIZE) {}
-
-  template <typename T> void push(T val) {
-    assert(type == Data::get_type<T>());
-    /* assert not yet full */
-    assert(!is_full());
-    data[len++].set(val);
-  }
-  void push() {
-    /* assert not yet full */
-    assert(!is_full());
-    data[len++].set();
-  }
-
-  template <typename T> void set(int i, T val) {
-    assert(type == Data::get_type<T>());
-    assert(i > 0);
-    assert(i < length());
-    data[i].set(val);
-  }
-  void set(int i) {
-    assert(i > 0);
-    assert(i < length());
-    data[i].set();
-  }
-
-  template <typename T> T get(int i) const {
-    assert(type == Data::get_type<T>());
-    return data[i].get<T>();
-  }
-  bool is_missing(int i) const { return data[i].is_missing(); }
-  int length() const { return len; }
-  bool is_full() const { return length() >= DF_CHUNK_SIZE; }
-};
-
 class DataFrameChunk : public DataFrame {
-public:
+private:
   const Schema &schema;
-  const vector<ChunkColumn> columns;
+  vector<unique_ptr<Column>> columns;
 
+public:
   DataFrameChunk(const Schema &scm) : schema(scm) {
     columns.reserve(schema.width());
     for (int i = 0; i < schema.width(); i++) {
-      columns.emplace_back(schema.col_type(i));
+      columns.emplace_back(Column::create(scm.col_type(i)));
     }
   }
 
-  template <typename T> T get(int y, int x) const {
-    assert(x > 0);
-    assert(x < schema.width());
-    return columns[x].get<T>(y);
+  const Schema &get_schema() const { return schema; }
+
+  void fill(ReadCursor &rc) {
+    int len = yield<int>(rc);
+    /* fill each column from left to right */
+    for (int i = 0; i < schema.width(); i++) {
+      columns[i]->fill(len, rc);
+    }
+  }
+
+  void serialize(WriteCursor &wc) const {
+    int len = nrows();
+    pack(wc, len);
+    for (int i = 0; i < schema.width(); i++) {
+      assert(columns[i]->length() == len);
+      columns[i]->serialize(wc);
+    }
+  }
+
+  int get_int(int y, int x) const {
+    assert(y >= 0);
+    assert(y < nrows());
+    assert(x >= 0);
+    assert(x < ncols());
+
+    const unique_ptr<Column> &col = columns[x];
+    assert(!col->is_missing(y));
+    return col->get_int(y);
+  }
+
+  float get_float(int y, int x) const {
+    assert(y >= 0);
+    assert(y < nrows());
+    assert(x >= 0);
+    assert(x < ncols());
+
+    const unique_ptr<Column> &col = columns[x];
+    assert(!col->is_missing(y));
+    return col->get_float(y);
+  }
+
+  bool get_bool(int y, int x) const {
+    assert(y >= 0);
+    assert(y < nrows());
+    assert(x >= 0);
+    assert(x < ncols());
+
+    const unique_ptr<Column> &col = columns[x];
+    assert(!col->is_missing(y));
+    return col->get_bool(y);
+  }
+
+  string *get_string(int y, int x) const {
+    assert(y >= 0);
+    assert(y < nrows());
+    assert(x >= 0);
+    assert(x < ncols());
+
+    const unique_ptr<Column> &col = columns[x];
+    assert(!col->is_missing(y));
+    return col->get_string(y);
+  }
+
+  bool is_missing(int y, int x) const {
+    assert(y >= 0);
+    assert(y < nrows());
+    assert(x >= 0);
+    assert(x < ncols());
+
+    const unique_ptr<Column> &col = columns[x];
+    return col->is_missing(y);
   }
 
   bool is_full() const {
     assert(columns.size() > 0);
-    return columns[0].is_full();
+    return columns[0]->length() >= DF_CHUNK_SIZE;
   }
 
-  void add_row(const vector<Data> &data) const {
+  void add_row(const Row &row) {
     assert(!is_full());
-    int min_width = min(data.size(), schema.width());
-    for (int i = 0; i < min_width; i++) {
-      Data &d = data[i];
-      Column &col = columns[i];
-      if (d.is_missing()) {
-        col.push();
+    for (int i = 0; i < schema.width(); i++) {
+      unique_ptr<Column> &col = columns[i];
+      if (row.is_missing(i)) {
+        col->push();
       } else {
         switch (schema.col_type(i)) {
         case Data::Type::INT:
-          col.push<int>(d.get<int>());
+          col->push(row.get<int>(i));
           break;
         case Data::Type::FLOAT:
-          col.push<float>(d.get<float>());
+          col->push(row.get<float>(i));
           break;
         case Data::Type::BOOL:
-          col.push<bool>(d.get<bool>());
+          col->push(row.get<bool>(i));
           break;
         case Data::Type::STRING:
-          col.push<string *>(d.get<string *>());
-          break;
-        case Data::Type::MISSING:
-          col.push();
+          col->push(row.get<string *>(i));
           break;
         default:
           assert(false);
         }
       }
     }
+  }
+
+  int nrows() const {
+    if (columns.size())
+      return columns[0]->length();
+    return 0;
   }
 };

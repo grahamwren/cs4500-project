@@ -5,6 +5,7 @@
 #include "test_cursor.h"
 #include "test_data.h"
 #include "test_dataframe.h"
+#include "test_dataframe_chunk.h"
 #include "test_lru_cache.h"
 #include "test_network.h"
 // #include "test_network_dataframe.h"

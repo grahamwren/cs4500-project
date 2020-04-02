@@ -1,7 +1,7 @@
 DEBUG=true
 CC=clang++
-FAST_CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false
-DEBUG_CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall -DKV_LOG=true -DNODE_LOG=true -DSOCK_LOG=true
+FAST_CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -pthread
+DEBUG_CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall -DKV_LOG=true -DNODE_LOG=true -DSOCK_LOG=true -pthread
 
 ifeq ($(DEBUG),true)
 	CCOPTS=$(DEBUG_CCOPTS)

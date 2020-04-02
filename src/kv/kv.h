@@ -52,9 +52,22 @@ private:
    * get data chunk for this key
    * Uses shared_lock on data_mtx
    */
-  weak_ptr<DataChunk> get_data(const ChunkKey &key) const {
+  weak_ptr<DataChunk> get_local_data(const ChunkKey &key) const {
     shared_lock lock(data_mtx);
     return weak_ptr<DataChunk>(data.at(key));
+  }
+
+  weak_ptr<DataChunk> get_network_data(const ChunkKey &key) const {
+
+    optional<IpV4Addr> addr = find_peer_for_chunk(key);
+    assert(addr);
+
+    return cache.fetch(key, [&,this](const ChunkKey &key){
+      Command get_cmd(key);
+      if (KV_LOG)
+        cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
+      return node.send_cmd(*addr, get_cmd);
+    });
   }
 
   /**
@@ -86,7 +99,7 @@ protected:
   }
 
   optional<sized_ptr<uint8_t>> handle_get_cmd(IpV4Addr src, const Command &c) {
-    shared_ptr<DataChunk> dc = get_data(c.key).lock();
+    shared_ptr<DataChunk> dc = get_local_data(c.key).lock();
     return dc->data();
   }
   optional<sized_ptr<uint8_t>> handle_put_cmd(IpV4Addr src, Command &c) {
@@ -145,22 +158,8 @@ public:
   weak_ptr<DataChunk> get(const ChunkKey &k) const {
     if (KV_LOG)
       cout << "KV.get(" << k << ")" << endl;
-    /* find peer who owns this DF */
-    optional<IpV4Addr> addr = find_peer_for_chunk(k);
-    /* assert addr found */
-    assert(addr);
 
-    /* if this node owns the chunk */
-    if (*addr == node.addr()) {
-      return get_data(k);
-    } else {
-      return cache.fetch(k, [&, this](const ChunkKey &key) {
-        Command get_cmd(k);
-        if (KV_LOG)
-          cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
-        return node.send_cmd(*addr, get_cmd);
-      });
-    }
+    return is_local(k) ? get_local_data(k) : get_network_data(k);
   }
 
   void put(const ChunkKey &k, unique_ptr<DataChunk> &&dc) {
@@ -191,6 +190,10 @@ public:
         cout << "KV.send(" << *addr << ", " << put_cmd << ")" << endl;
       node.send_cmd(*addr, put_cmd);
     }
+  }
+
+  bool is_local(ChunkKey k) const {
+    return data.find(k) != data.end();
   }
 
   void teardown() { node.teardown(); }

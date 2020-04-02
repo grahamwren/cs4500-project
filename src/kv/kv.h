@@ -5,6 +5,7 @@
 #include "data_chunk.h"
 #include "lru_cache.h"
 #include "network/node.h"
+#include "schema.h"
 #include <iostream>
 #include <shared_mutex>
 #include <unordered_map>
@@ -63,10 +64,10 @@ private:
     assert(addr);
 
     return cache.fetch(key, [&,this](const ChunkKey &key){
-      Command get_cmd(key);
+      Command* get_cmd = dynamic_cast<Command*>(new GetCommand(&key));
       if (KV_LOG)
         cout << "KV.send(" << *addr << ", " << get_cmd << ")" << endl;
-      return node.send_cmd(*addr, get_cmd);
+      return node.send_cmd(*addr, *get_cmd);
     });
   }
 
@@ -88,33 +89,7 @@ protected:
   optional<sized_ptr<uint8_t>> handler(IpV4Addr src, Command &c) {
     if (KV_LOG)
       cout << "KV.asyncRecv(" << src << ", " << c << ")" << endl;
-    switch (c.type) {
-    case Command::Type::GET:
-      return handle_get_cmd(src, c);
-    case Command::Type::PUT:
-      return handle_put_cmd(src, c);
-    case Command::Type::OWN:
-      return handle_own_cmd(src, c);
-    }
-  }
-
-  optional<sized_ptr<uint8_t>> handle_get_cmd(IpV4Addr src, const Command &c) {
-    shared_ptr<DataChunk> dc = get_local_data(c.key).lock();
-    return dc->data();
-  }
-  optional<sized_ptr<uint8_t>> handle_put_cmd(IpV4Addr src, Command &c) {
-    put_data(c.key, move(c.data));
-    return sized_ptr<uint8_t>(0, nullptr);
-  }
-  optional<sized_ptr<uint8_t>> handle_own_cmd(IpV4Addr src, const Command &c) {
-    if (ownership_mapping.find(c.name) != ownership_mapping.end() &&
-        ownership_mapping.at(c.name) != src) {
-      cout << "ERROR: node " << src << " claimed ownership for DF "
-           << c.name.c_str() << " already owned by "
-           << ownership_mapping.at(c.name) << endl;
-      return nullopt; // node returns an PacketType::ERR
-    }
-    return sized_ptr<uint8_t>(0, nullptr);
+    return c.run(*this, src);
   }
 
   /**
@@ -140,10 +115,31 @@ protected:
   }
 
 public:
+  optional<sized_ptr<uint8_t>> run_get_cmd(const ChunkKey &key) {
+    shared_ptr<DataChunk> dc = get_local_data(key).lock();
+    return dc->data();
+  }
+
+  optional<sized_ptr<uint8_t>> run_put_cmd(const ChunkKey &key, unique_ptr<DataChunk> data) {
+    put_data(key, move(data));
+    return sized_ptr<uint8_t>(0, nullptr);
+  }
+
+  optional<sized_ptr<uint8_t>> run_new_cmd(const string &name, const Schema &scm, IpV4Addr &src) {
+    if (ownership_mapping.find(name) != ownership_mapping.end() &&
+        ownership_mapping.at(name) != src) {
+      cout << "ERROR: node " << src << " claimed ownership for DF "
+           << name.c_str() << " already owned by "
+           << ownership_mapping.at(name) << endl;
+      return nullopt; // node returns an PacketType::ERR
+    }
+    return sized_ptr<uint8_t>(0, nullptr);
+  }
+
   KV(const IpV4Addr &a) : node(a) {
     node.set_data_handler([&](IpV4Addr src, ReadCursor &c) {
-      Command cmd(c);
-      return this->handler(src, cmd);
+      shared_ptr<Command> cmd = deserialize_command(c);
+      return this->handler(src, *cmd);
     });
     node.start();
   }
@@ -171,13 +167,13 @@ public:
     if (!addr) {
       addr = node.addr();
       put_owner(k.name, node.addr());
-      Command own_cmd(k.name);
+      Command* new_cmd = dynamic_cast<Command*>(new NewCommand(&k.name, new Schema("F")));
       if (KV_LOG)
-        cout << "KV.send(all, " << own_cmd << ")" << endl;
+        cout << "KV.send(all, " << new_cmd << ")" << endl;
 
       WriteCursor wc;
-      own_cmd.serialize(wc);
-      bool res = node.send_cmd_to_cluster(own_cmd);
+      new_cmd->serialize(wc);
+      bool res = node.send_cmd_to_cluster(*new_cmd);
       assert(res);
     }
 
@@ -185,10 +181,10 @@ public:
     if (*addr == node.addr()) {
       put_data(k, move(dc));
     } else {
-      Command put_cmd(k, move(dc));
+      Command* put_cmd = dynamic_cast<Command*>(new PutCommand(&k, move(dc)));
       if (KV_LOG)
         cout << "KV.send(" << *addr << ", " << put_cmd << ")" << endl;
-      node.send_cmd(*addr, put_cmd);
+      node.send_cmd(*addr, *put_cmd);
     }
   }
 

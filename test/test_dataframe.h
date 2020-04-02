@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sample_rowers.h"
 #include "simple_dataframe.h"
 
 class TestDataFrame : public ::testing::Test {
@@ -94,18 +95,7 @@ TEST_F(TestDataFrame, test_map) {
     df->add_row(r);
   }
 
-  class CountDiv2 : public Rower {
-  public:
-    int count = 0;
-
-    bool accept(const Row &r) {
-      if (r.get<int>(0) % 2 == 0)
-        count++;
-      return true;
-    }
-  };
-
-  CountDiv2 rower;
+  CountDiv2 rower(0);
   df->map(rower);
   EXPECT_EQ(rower.count, 50);
 }

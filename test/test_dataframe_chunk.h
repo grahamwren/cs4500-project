@@ -60,27 +60,6 @@ TEST_F(TestDataFrameChunk, test__add_row__get__nrows) {
   EXPECT_EQ(df->nrows(), 1000);
 }
 
-TEST_F(TestDataFrameChunk, test_set) {
-  /* fill df with 100 rows */
-  Row r(df->get_schema());
-  char buf[1024];
-  for (int i = 0; i < 100; i++) {
-    r.set(0, i);
-    sprintf(buf, "hello %d", i);
-    r.set(1, new string(buf));
-    r.set(2, i * 3.3f);
-    r.set(3, i % 3 == 0);
-    df->add_row(r);
-  }
-
-  EXPECT_EQ(df->get_int(22, 0), 22);
-  EXPECT_EQ(df->get_float(22, 2), 22 * 3.3f);
-  df->set(22, 0, 333);
-  df->set(22, 2, 4.7f);
-  EXPECT_EQ(df->get_int(22, 0), 333);
-  EXPECT_EQ(df->get_float(22, 2), 4.7f);
-}
-
 TEST_F(TestDataFrameChunk, test_map) {
   /* fill df with 100 rows */
   Row r(df->get_schema());
@@ -110,33 +89,6 @@ TEST_F(TestDataFrameChunk, test_map) {
   EXPECT_EQ(rower.count, 50);
 }
 
-TEST_F(TestDataFrameChunk, test_filter) {
-  /* fill df with 100 rows */
-  Row r(df->get_schema());
-  char buf[1024];
-  for (int i = 0; i < 100; i++) {
-    r.set(0, i);
-    sprintf(buf, "hello %d", i);
-    r.set(1, new string(buf));
-    r.set(2, i * 3.3f);
-    r.set(3, i % 3 == 0);
-    df->add_row(r);
-  }
-
-  class FilterDiv2 : public Rower {
-  public:
-    bool accept(const Row &r) { return r.get<int>(0) % 2 == 0; }
-  };
-
-  FilterDiv2 rower;
-  DataFrame *results = df->filter(rower);
-  EXPECT_EQ(results->nrows(), 50);
-  EXPECT_EQ(results->get_int(0, 0), 0);
-  EXPECT_EQ(results->get_int(1, 0), 2);
-  EXPECT_EQ(results->get_int(2, 0), 4);
-  delete results;
-}
-
 TEST_F(TestDataFrameChunk, test_equals) {
   /* fill df with 100 rows */
   Row r(df->get_schema());
@@ -161,8 +113,4 @@ TEST_F(TestDataFrameChunk, test_equals) {
   }
 
   EXPECT_TRUE(df->equals(*df2));
-  df->set(4, 1, new string("333"));
-  EXPECT_FALSE(df->equals(*df2));
-  df2->set(4, 1, new string("333"));
-  EXPECT_TRUE(df2->equals(*df));
 }

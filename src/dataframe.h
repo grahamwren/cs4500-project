@@ -5,9 +5,8 @@
 #endif
 
 #include "row.h"
+#include "rower.h"
 #include "schema.h"
-
-class Rower;
 
 using namespace std;
 
@@ -20,9 +19,7 @@ using namespace std;
  * authors: @grahamwren, jagen31
  */
 class DataFrame {
-
 public:
-
   virtual ~DataFrame() {}
   /**
    * Returns the dataframe's schema. Modifying the schema after a dataframe
@@ -36,7 +33,35 @@ public:
    */
   virtual void add_row(const Row &row) = 0;
 
-  virtual void fill_row(int, Row &) const = 0;
+  virtual void fill_row(int idx, Row &row) const {
+    const Schema &schema = get_schema();
+    assert(row.width() == schema.width());
+    assert(row.width() == ncols());
+    row.set_idx(idx);
+    for (int i = 0; i < schema.width(); ++i) {
+      Data::Type type = schema.col_type(i);
+      if (is_missing(idx, i))
+        row.set_missing(i);
+      else {
+        switch (type) {
+        case Data::Type::INT:
+          row.set(i, get_int(idx, i));
+          break;
+        case Data::Type::FLOAT:
+          row.set(i, get_float(idx, i));
+          break;
+        case Data::Type::BOOL:
+          row.set(i, get_bool(idx, i));
+          break;
+        case Data::Type::STRING:
+          row.set(i, get_string(idx, i));
+          break;
+        default:
+          assert(false); // unsupported column type
+        }
+      }
+    }
+  }
 
   /**
    * Set the value at the given column and row to the given value.
@@ -69,13 +94,19 @@ public:
   /**
    * The number of columns in the dataframe.
    */
-  virtual int ncols() const = 0;
+  virtual int ncols() const { return get_schema().width(); }
 
   /**
    * traverses the rows in this DataFrame in order, calling accept on the given
    * Rower with each row
    */
-  virtual void map(Rower &rower) const = 0;
+  virtual void map(Rower &rower) const {
+    Row row(get_schema());
+    for (int i = 0; i < nrows(); i++) {
+      fill_row(i, row);
+      rower.accept(row);
+    }
+  }
 
   /**
    * builds a new DataFrame based on the rows with the rower returns true from

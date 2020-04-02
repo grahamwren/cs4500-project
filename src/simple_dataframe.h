@@ -126,16 +126,16 @@ public:
         Data::Type type = schema.col_type(i);
         switch (type) {
         case Data::Type::INT:
-          col.push_int(row.get<int>(i));
+          col.push(row.get<int>(i));
           break;
         case Data::Type::BOOL:
-          col.push_bool(row.get<bool>(i));
+          col.push(row.get<bool>(i));
           break;
         case Data::Type::FLOAT:
-          col.push_float(row.get<float>(i));
+          col.push(row.get<float>(i));
           break;
         case Data::Type::STRING:
-          col.push_string(row.get<string *>(i));
+          col.push(row.get<string *>(i));
           break;
         case Data::Type::MISSING:
           col.push();

@@ -62,6 +62,11 @@ template <> inline std::string yield(ReadCursor &c) {
   return std::string(sp.ptr, sp.len - 1);
 }
 
+template <> inline std::string *yield(ReadCursor &c) {
+  sized_ptr<const char> sp = yield<sized_ptr<const char>>(c);
+  return new std::string(sp.ptr, sp.len - 1);
+}
+
 template <typename T> inline void unyield(ReadCursor &c) {
   static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                 "Type must be trivially copyable");
@@ -162,6 +167,10 @@ template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {
 
 template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
   pack(c, (sized_ptr<const char>)ptr);
+}
+
+template <> inline void pack(WriteCursor &c, std::string *const val) {
+  pack<sized_ptr<const char>>(c, sized_ptr(val->size() + 1, val->c_str()));
 }
 
 template <> inline void pack(WriteCursor &c, const std::string &val) {

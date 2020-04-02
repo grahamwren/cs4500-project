@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cursor.h"
 #include "data.h"
 #include <cassert>
 #include <iostream>
@@ -19,10 +20,13 @@ public:
 
   static Column *create(Data::Type);
 
-  virtual void push_int(int val) = 0;
-  virtual void push_float(float val) = 0;
-  virtual void push_bool(bool val) = 0;
-  virtual void push_string(string *val) = 0;
+  virtual void fill(int, ReadCursor &) = 0;
+  virtual void serialize(WriteCursor &) = 0;
+
+  virtual void push(int val) = 0;
+  virtual void push(float val) = 0;
+  virtual void push(bool val) = 0;
+  virtual void push(string *val) = 0;
   virtual void push() = 0;
 
   virtual void set(int y, int val) = 0;
@@ -50,11 +54,36 @@ protected:
 public:
   TypedColumn() : Column(Data::get_type<T>()) {}
 
+  void fill(int len, ReadCursor &c) {
+    data.reserve(len);
+    for (int i = 0; i < len; i++) {
+      bool missing = yield<uint8_t>(c) == 1;
+      if (missing) {
+        push();
+      } else {
+        push(yield<T>(c));
+      }
+    }
+  }
+
+  void serialize(WriteCursor &c) {
+    for (int i = 0; i < length(); i++) {
+      if (is_missing(i)) {
+        /* pack single byte for missing */
+        pack(c, (uint8_t)1);
+      } else {
+        /* pack single byte for missing */
+        pack(c, (uint8_t)0);
+        pack(c, (T)data[i]);
+      }
+    }
+  }
+
   /* this is annoying, they should already be here from parent */
-  void push_int(int val) { assert(false); }
-  void push_float(float val) { assert(false); }
-  void push_bool(bool val) { assert(false); }
-  void push_string(string *val) { assert(false); }
+  void push(int val) { assert(false); }
+  void push(float val) { assert(false); }
+  void push(bool val) { assert(false); }
+  void push(string *val) { assert(false); }
   void push() {
     data.push_back((T)NULL);
     missings.push_back(true);
@@ -92,19 +121,19 @@ public:
   }
 };
 
-template <> void TypedColumn<int>::push_int(int val) {
+template <> void TypedColumn<int>::push(int val) {
   missings.push_back(false);
   data.push_back(val);
 }
-template <> void TypedColumn<float>::push_float(float val) {
+template <> void TypedColumn<float>::push(float val) {
   missings.push_back(false);
   data.push_back(val);
 }
-template <> void TypedColumn<bool>::push_bool(bool val) {
+template <> void TypedColumn<bool>::push(bool val) {
   missings.push_back(false);
   data.push_back(val);
 }
-template <> void TypedColumn<string *>::push_string(string *val) {
+template <> void TypedColumn<string *>::push(string *val) {
   assert(val);
   missings.push_back(false);
   data.push_back(val);

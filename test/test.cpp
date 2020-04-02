@@ -11,6 +11,7 @@
 // #include "test_network_dataframe.h"
 #include "test_packet.h"
 #include "test_parser.h"
+#include "test_partial_dataframe.h"
 #include "test_row.h"
 #include "test_schema.h"
 

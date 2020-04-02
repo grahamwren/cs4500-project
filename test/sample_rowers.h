@@ -15,3 +15,19 @@ public:
     return true;
   }
 };
+
+class MinMaxInt : public Rower {
+public:
+  int min_int = INT_MAX;
+  int max_int = INT_MIN;
+  int col;
+  MinMaxInt(int col) : col(col) {}
+
+  bool accept(const Row &r) {
+    if (r.get<int>(col) < min_int)
+      min_int = r.get<int>(col);
+    if (r.get<int>(col) > max_int)
+      max_int = r.get<int>(col);
+    return true;
+  }
+};

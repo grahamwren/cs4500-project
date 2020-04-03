@@ -4,7 +4,9 @@
 
 using namespace std;
 
-static int NE = 10 * 1000 * 1000;
+#ifndef NUM_ELEMENTS
+#define NUM_ELEMENTS 10 * 1000 * 1000
+#endif
 
 class Demo {
 public:
@@ -23,7 +25,7 @@ public:
     /* add rows via PDF */
     PartialDataFrame pdf(df_info.schema);
     Row row(df_info.schema);
-    for (int i = 0; i < NE; i++) {
+    for (int i = 0; i < NUM_ELEMENTS; i++) {
       row.set(0, i);
       pdf.add_row(row);
     }

@@ -15,11 +15,11 @@ SHARED_HEADER_FILES=src/**/*
 SRC_DIR=src
 BUILD_DIR=build
 
-run: build
-	$(BUILD_DIR)/example.exe datafile.sor
+run: run_network
 
-build: $(BUILD_DIR)/example.exe
+build: $(BUILD_DIR)/demo.exe
 
+valgrind: CCOPTS=$(DEBUG_CCOPTS) -DNUM_ELEMENTS=10000 -DDF_CHUNK_SIZE=4096
 valgrind: docker_net_valgrind
 
 test: FORCE
@@ -32,9 +32,6 @@ $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
-
-$(BUILD_DIR)/big_demo.exe: $(SRC_DIR)/big_demo.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
 $(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(SHARED_HEADER_FILES)
@@ -97,7 +94,7 @@ run_network: docker_install
 	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.2)
 
 run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false
-run_perf: APP=big_demo
+run_perf: APP=demo
 run_perf: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)

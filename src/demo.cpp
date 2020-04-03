@@ -5,7 +5,7 @@
 
 using namespace std;
 
-static int NE = 40 * 1000;
+static int NE = 1000 * 1000;
 
 class Demo {
 public:
@@ -89,7 +89,7 @@ public:
     WriteCursor wc;
     cmd.serialize(wc);
     Packet data_pkt(0, ip, PacketType::DATA, wc);
-    cout << "DEMO.send(" << cmd << ")" << endl;
+    cout << "DEMO.send(" << ip << ", " << cmd << ")" << endl;
     Packet resp = DataSock::fetch(data_pkt);
     cout << "DEMO.recv(" << resp << ")" << endl;
     if (resp.ok())

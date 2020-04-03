@@ -157,4 +157,6 @@ public:
                    return l->equals(*r);
                  });
   }
+
+  int chunk_idx() const { return start_idx / DF_CHUNK_SIZE; }
 };

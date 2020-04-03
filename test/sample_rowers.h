@@ -2,7 +2,7 @@
 
 #include "row.h"
 #include "rower.h"
-#include <bits/stdc++.h>
+#include <limits.h>
 
 class CountDiv2 : public Rower {
 public:

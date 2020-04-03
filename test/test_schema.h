@@ -28,8 +28,8 @@ TEST_F(TestSchema, test_col_idx_width) {
 
 TEST_F(TestSchema, test_equals) {
   Schema other("");
-  EXPECT_FALSE(other.equals(*scm));
+  EXPECT_FALSE(other == *scm);
   other.add_column('I', new string("id"));
   other.add_column('S', new string("name"));
-  EXPECT_TRUE(other.equals(*scm));
+  EXPECT_TRUE(other == *scm);
 }

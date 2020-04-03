@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dataframe_chunk.h"
+#include <unordered_map>
 
 class PartialDataFrame : public DataFrame {
 protected:
@@ -8,13 +9,9 @@ protected:
   vector<DataFrameChunk> chunks;
   unordered_map<int, int> start_idx_map;
 
-  const DataFrameChunk &get_chunk(int y) const {
+  const DataFrameChunk &get_chunk_by_row(int y) const {
     int chunk_idx = y / DF_CHUNK_SIZE;
-    int nearest_start_idx = chunk_idx * DF_CHUNK_SIZE;
-    auto it = start_idx_map.find(nearest_start_idx);
-    /* assert chunk is in this PartialDF */
-    assert(it != start_idx_map.end());
-    return chunks[it->second];
+    return get_chunk_by_chunk_idx(chunk_idx);
   }
 
 public:
@@ -45,23 +42,23 @@ public:
   }
 
   int get_int(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk(y);
+    const DataFrameChunk &chunk = get_chunk_by_row(y);
     return chunk.get_int(y, x);
   }
   float get_float(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk(y);
+    const DataFrameChunk &chunk = get_chunk_by_row(y);
     return chunk.get_float(y, x);
   }
   bool get_bool(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk(y);
+    const DataFrameChunk &chunk = get_chunk_by_row(y);
     return chunk.get_bool(y, x);
   }
   string *get_string(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk(y);
+    const DataFrameChunk &chunk = get_chunk_by_row(y);
     return chunk.get_string(y, x);
   }
   bool is_missing(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk(y);
+    const DataFrameChunk &chunk = get_chunk_by_row(y);
     return chunk.is_missing(y, x);
   }
 
@@ -80,5 +77,18 @@ public:
 
     assert(chunk.get_start() >= end_idx);
     start_idx_map.emplace(chunk.get_start(), chunks.size() - 1);
+  }
+
+  bool has_chunk(int chunk_idx) const {
+    int nearest_start_idx = chunk_idx * DF_CHUNK_SIZE;
+    auto it = start_idx_map.find(nearest_start_idx);
+    return it != start_idx_map.end();
+  }
+
+  const DataFrameChunk &get_chunk_by_chunk_idx(int chunk_idx) const {
+    assert(has_chunk(chunk_idx));
+    int nearest_start_idx = chunk_idx * DF_CHUNK_SIZE;
+    auto it = start_idx_map.find(nearest_start_idx);
+    return chunks[it->second];
   }
 };

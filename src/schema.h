@@ -147,7 +147,7 @@ public:
     return types.size();
   }
 
-  bool equals(const Schema &other) const {
+  bool operator==(const Schema &other) const {
     return types.size() == other.types.size() &&
            equal(types.begin(), types.end(), other.types.begin()) &&
            columns.size() == other.columns.size() &&
@@ -168,3 +168,21 @@ public:
     dest[width()] = '\0';
   }
 };
+
+template <>
+inline void pack<const Schema &>(WriteCursor &c, const Schema &scm) {
+  char buf[scm.width() + 1];
+  scm.c_str(buf);
+  pack(c, sized_ptr<char>(scm.width() + 1, buf));
+}
+
+template <> inline Schema yield(ReadCursor &c) {
+  return Schema(yield<sized_ptr<char>>(c).ptr);
+}
+
+inline ostream &operator<<(ostream &output, const Schema &scm) {
+  char buf[scm.width() + 1];
+  scm.c_str(buf);
+  output << "Schema[" << buf << "]";
+  return output;
+}

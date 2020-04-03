@@ -2,12 +2,14 @@
 
 #include "dataframe_chunk.h"
 #include "df_info.h"
+#include "kv/command.h"
 #include "kv/key.h"
 #include "network/packet.h"
 #include "network/sock.h"
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <tuple>
 
 #ifndef CLUSTER_LOG
@@ -59,14 +61,11 @@ protected:
   void get_ownership_in_cluster() {
     for (const IpV4Addr &ip : nodes) {
       GetOwnedCommand cmd;
-      WriteCursor wc;
-      cmd.serialize(wc);
-      Packet req(0, ip, PacketType::DATA, wc);
-      Packet resp = DataSock::fetch(req);
-      assert(resp.ok());
+      optional<DataChunk> data = send_cmd(ip, cmd);
+      assert(data);
 
       // load ownership into map for each key in resp
-      ReadCursor rc(resp.data->data());
+      ReadCursor rc(data->data());
       while (has_next(rc)) {
         Key key = yield<Key>(rc);
         /* if haven't seen this key, add to dataframes */
@@ -86,10 +85,14 @@ protected:
   }
 
   optional<DataChunk> send_cmd(const IpV4Addr &ip, const Command &cmd) const {
+    if (CLUSTER_LOG)
+      cout << "Cluster.send(" << cmd << ")" << endl;
     WriteCursor wc;
     cmd.serialize(wc);
     Packet req(0, ip, PacketType::DATA, wc);
     Packet resp = DataSock::fetch(req);
+    if (CLUSTER_LOG)
+      cout << "Cluster.recv(" << resp << ")" << endl;
     if (resp.ok())
       return move(*resp.data);
     else
@@ -141,6 +144,23 @@ public:
       optional<DataChunk> dc = send_cmd(node, cmd);
       success = success && dc;
     }
+    return success;
+  }
+
+  bool shutdown() const {
+    bool success = true;
+    for (const IpV4Addr &ip : nodes) {
+      Packet req(0, ip, PacketType::SHUTDOWN);
+      if (CLUSTER_LOG)
+        cout << "Cluster.send(" << req << ")" << endl;
+      Packet resp = DataSock::fetch(req);
+      if (CLUSTER_LOG)
+        cout << "Cluster.recv(" << resp << ")" << endl;
+      success = success && resp.ok();
+    }
+    if (CLUSTER_LOG)
+      cout << "Cluster.shutdown(success: " << (success ? "true" : "false")
+           << ")" << endl;
     return success;
   }
 

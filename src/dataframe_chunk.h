@@ -4,10 +4,11 @@
 #include "data.h"
 #include "dataframe.h"
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #ifndef DF_CHUNK_SIZE
-#define DF_CHUNK_SIZE 4096
+#define DF_CHUNK_SIZE 4096 * 2 * 2
 #endif
 
 using namespace std;
@@ -36,6 +37,7 @@ public:
   const Schema &get_schema() const { return schema; }
 
   int get_start() const { return start_idx; }
+  int chunk_idx() const { return get_start() / DF_CHUNK_SIZE; }
 
   void fill(ReadCursor &rc) {
     start_idx = yield<int>(rc);
@@ -157,6 +159,4 @@ public:
                    return l->equals(*r);
                  });
   }
-
-  int chunk_idx() const { return start_idx / DF_CHUNK_SIZE; }
 };

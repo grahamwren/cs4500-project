@@ -16,7 +16,7 @@ using namespace std;
 #endif
 
 #ifndef SOCK_LOG
-#define SOCK_LOG true
+#define SOCK_LOG false
 #endif
 
 #ifndef MAX_DATA_SIZE

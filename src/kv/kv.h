@@ -14,7 +14,7 @@
 using namespace std;
 
 #ifndef KV_LOG
-#define KV_LOG true
+#define KV_LOG false
 #endif
 
 class KV {

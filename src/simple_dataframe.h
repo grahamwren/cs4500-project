@@ -13,10 +13,6 @@
 
 using namespace std;
 
-#ifndef THREAD_COUNT
-#define THREAD_COUNT std::thread::hardware_concurrency()
-#endif
-
 class Row;
 class Column;
 class Data;

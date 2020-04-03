@@ -16,7 +16,7 @@
 using namespace std;
 
 #ifndef NODE_LOG
-#define NODE_LOG true
+#define NODE_LOG false
 #endif
 
 /**
@@ -166,7 +166,7 @@ protected:
     int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
     peers.insert(ips, ips + n_addrs);
     print_peers();
- }
+  }
 
   void print_peers() const {
     if (!NODE_LOG)

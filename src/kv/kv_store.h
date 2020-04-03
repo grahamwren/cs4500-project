@@ -4,6 +4,7 @@
 #include "partial_dataframe.h"
 #include "schema.h"
 #include <unordered_map>
+#include <functional>
 
 using namespace std;
 

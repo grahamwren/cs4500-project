@@ -8,6 +8,8 @@
 #include <iostream>
 #include <memory>
 
+using namespace std;
+
 /**
  * an implementation of sized_ptr that owns it's data
  */

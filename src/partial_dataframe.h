@@ -91,4 +91,6 @@ public:
     auto it = start_idx_map.find(nearest_start_idx);
     return chunks[it->second];
   }
+
+  int nchunks() const { return chunks.size(); }
 };

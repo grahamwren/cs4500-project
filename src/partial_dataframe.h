@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dataframe_chunk.h"
+#include <unordered_map>
 
 class PartialDataFrame : public DataFrame {
 protected:

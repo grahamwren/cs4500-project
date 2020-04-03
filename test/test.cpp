@@ -9,6 +9,7 @@
 #include "test_lru_cache.h"
 #include "test_network.h"
 // #include "test_network_dataframe.h"
+#include "test_kv_store.h"
 #include "test_packet.h"
 #include "test_parser.h"
 #include "test_partial_dataframe.h"

@@ -25,7 +25,8 @@ using namespace std;
  */
 class Node {
 public:
-  typedef function<bool>(IpV4Addr, ReadCursor &, WriteCursor &) handler_fn_t;
+  typedef function<bool(const IpV4Addr &, ReadCursor &, WriteCursor &)>
+      handler_fn_t;
 
 protected:
   bool should_continue;
@@ -118,7 +119,6 @@ protected:
     if (a == my_addr)
       return;
 
-    unique_lock lock(peers_mtx);
     auto it = peers.find(a);
     /* if not found in peers list */
     if (it == peers.end()) {
@@ -139,7 +139,7 @@ protected:
   void handle_data_pkt(const DataSock &sock, const Packet &req) const {
     ReadCursor rc(req.data->data());
     WriteCursor wc;
-    if (data_handler(req.hdr.src_addr, wc)) {
+    if (data_handler(req.hdr.src_addr, rc, wc)) {
       Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK,
                      sized_ptr<uint8_t>(wc.length(), wc.bytes()));
       sock.send_pkt(ok_resp);
@@ -184,8 +184,8 @@ protected:
 public:
   Node(const IpV4Addr &a)
       : should_continue(true), my_addr(a), listen_s(a),
-        data_handler([](IpV4Addr src, ReadCursor &rc) {
-          return sized_ptr<uint8_t>(0, nullptr);
+        data_handler([](IpV4Addr src, ReadCursor &rc, WriteCursor &wc) {
+          return true;
         }) {
     peers.emplace(a);
     listen_s.listen();

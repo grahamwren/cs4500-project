@@ -3,6 +3,7 @@
 #include "chunk_key.h"
 #include "data_chunk.h"
 #include "kv_store.h"
+#include "network/packet.h"
 #include "schema.h"
 #include "sized_ptr.h"
 #include <iostream>
@@ -14,8 +15,9 @@ using namespace std;
 class Command {
 public:
   enum Type : uint8_t { GET, PUT, NEW, GET_OWNED };
-  static unpack(ReadCursor &);
-  virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) = 0;
+  virtual ~Command() {}
+  static unique_ptr<Command> unpack(ReadCursor &);
+  virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) const = 0;
   virtual Type get_type() const = 0;
   virtual void serialize(WriteCursor &) const = 0;
   virtual ostream &out(ostream &) const = 0;
@@ -28,6 +30,7 @@ private:
 
 public:
   GetCommand(const Key &key, int i) : key(key), chunk_idx(i) {}
+  GetCommand(ReadCursor &c) : key(yield<Key>(c)), chunk_idx(yield<int>(c)) {}
   Type get_type() const { return Type::GET; }
 
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
@@ -44,7 +47,7 @@ public:
 
   void serialize(WriteCursor &wc) const {
     pack(wc, Type::GET);
-    pack(wc, key);
+    pack<const Key &>(wc, key);
     pack(wc, chunk_idx);
   }
 
@@ -62,7 +65,7 @@ private:
 public:
   PutCommand(const Key &key, unique_ptr<DataChunk> &&dc) : key(key) {}
   PutCommand(ReadCursor &c)
-      : key(yield<Key>(c)), data(yield<sized_ptr<uint8_t>>(c)) {}
+      : key(yield<Key>(c)), data(new DataChunk(yield<sized_ptr<uint8_t>>(c))) {}
 
   Type get_type() const { return Type::PUT; }
 
@@ -78,7 +81,7 @@ public:
 
   void serialize(WriteCursor &wc) const {
     pack(wc, Type::PUT);
-    pack(wc, key);
+    pack<const Key &>(wc, key);
     pack(wc, sized_ptr<uint8_t>(data->len(), data->ptr()));
   }
 
@@ -109,8 +112,8 @@ public:
 
   void serialize(WriteCursor &wc) const {
     pack(wc, Type::NEW);
-    pack(wc, key);
-    pack(sc, scm);
+    pack<const Key &>(wc, key);
+    pack<const Schema &>(wc, scm);
   }
 
   ostream &out(ostream &output) const {
@@ -121,25 +124,22 @@ public:
 
 class GetOwnedCommand : public Command {
 public:
+  GetOwnedCommand(ReadCursor &c) {}
   Type get_type() const { return Type::GET_OWNED; }
 
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
     /* pack all the keys for PDFs which have chunk 0 */
     kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
-      if (e->second.has_chunk(0))
-        pack(dest, e->first);
+      if (e.second.has_chunk(0))
+        pack<const Key &>(dest, e.first);
     });
     return true;
   }
 
-  void serialize(WriteCursor &wc) const {
-    pack(wc, Type::GET);
-    pack(wc, key);
-    pack(wc, chunk_idx);
-  }
+  void serialize(WriteCursor &wc) const { pack(wc, Type::GET_OWNED); }
 
   ostream &out(ostream &output) const {
-    output << "GET(key: " << key << ", chunk_idx: " << chunk_idx << ")";
+    output << "GET_OWNED()";
     return output;
   }
 };

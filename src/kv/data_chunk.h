@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cursor.h"
 #include "sized_ptr.h"
 #include <algorithm>
 #include <cstdint>
@@ -50,8 +51,6 @@ public:
   uint8_t *ptr() const { return _data.ptr; }
 
   uint8_t operator[](int i) const { return _data[i]; }
-
-  void serialize(WriteCursor &c) const { pack(c, _data); }
 
   bool operator==(const DataChunk &other) const {
     return len() == other.len() &&

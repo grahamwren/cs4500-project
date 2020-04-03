@@ -59,7 +59,15 @@ public:
 
 static_assert(sizeof(IpV4Addr) == 4, "IpV4Addr was incorrect size");
 
-enum class PacketType { REGISTER, NEW_PEER, HELLO, OK, ERR, DATA, SHUTDOWN };
+enum class PacketType {
+  REGISTER,
+  NEW_PEER,
+  GET_PEERS,
+  OK,
+  ERR,
+  DATA,
+  SHUTDOWN
+};
 /**
  * POD class to represent a literal header to be sent or consumed over a socket
  * authors: @grahamwren @jagen31
@@ -168,8 +176,8 @@ ostream &operator<<(ostream &output, const PacketType type) {
   case PacketType::NEW_PEER:
     output << "NEW_PEER";
     break;
-  case PacketType::HELLO:
-    output << "HELLO";
+  case PacketType::GET_PEERS:
+    output << "GET_PEERS";
     break;
   case PacketType::OK:
     output << "OK";

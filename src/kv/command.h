@@ -2,109 +2,144 @@
 
 #include "chunk_key.h"
 #include "data_chunk.h"
-#include "sized_ptr.h"
+#include "kv_store.h"
 #include "schema.h"
-#include <cstring>
+#include "sized_ptr.h"
 #include <iostream>
-#include <functional>
+#include <memory>
+#include <string>
 
-class KV;
-class IpV4Addr;
+using namespace std;
 
 class Command {
-
 public:
-  enum Type : uint8_t { GET, PUT, NEW };
-
-  virtual ~Command() {}
-
-  // temporary return type
-  virtual optional<sized_ptr<uint8_t>> run(KV &kv, IpV4Addr &src) = 0;
-
+  enum Type : uint8_t { GET, PUT, NEW, GET_OWNED };
+  static unpack(ReadCursor &);
+  virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) = 0;
   virtual Type get_type() const = 0;
-
-  virtual void serialize(WriteCursor &wc) const = 0;
-
-  virtual ostream &print(ostream &output) const = 0;
+  virtual void serialize(WriteCursor &) const = 0;
+  virtual ostream &out(ostream &) const = 0;
 };
 
 class GetCommand : public Command {
-
-  const ChunkKey *key;
+private:
+  Key key;
+  int chunk_idx;
 
 public:
+  GetCommand(const Key &key, int i) : key(key), chunk_idx(i) {}
+  Type get_type() const { return Type::GET; }
 
-  GetCommand(const ChunkKey *key): key(key) {}
-  virtual ~GetCommand() { delete key; }
-
-  optional<sized_ptr<uint8_t>> run(KV &kv, IpV4Addr &src);
-
-  Type get_type() const {
-    return Type::GET;
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    if (kv.has_pdf(key)) {
+      PartialDataFrame &pdf = kv.get_pdf(key);
+      if (pdf.has_chunk(chunk_idx)) {
+        const DataFrameChunk &dfc = pdf.get_chunk_by_chunk_idx(chunk_idx);
+        dfc.serialize(dest);
+        return true;
+      }
+    }
+    return false;
   }
 
   void serialize(WriteCursor &wc) const {
-    key->serialize(wc);
+    pack(wc, Type::GET);
+    pack(wc, key);
+    pack(wc, chunk_idx);
   }
 
-  ostream &print(ostream &output) const {
-    output << key;
+  ostream &out(ostream &output) const {
+    output << "GET(key: " << key << ", chunk_idx: " << chunk_idx << ")";
     return output;
   }
 };
 
 class PutCommand : public Command {
-
-  const ChunkKey *key;
+private:
+  Key key;
   std::unique_ptr<DataChunk> data;
 
 public:
+  PutCommand(const Key &key, unique_ptr<DataChunk> &&dc) : key(key) {}
+  PutCommand(ReadCursor &c)
+      : key(yield<Key>(c)), data(yield<sized_ptr<uint8_t>>(c)) {}
 
-  PutCommand(const ChunkKey *key, std::unique_ptr<DataChunk> &&dc): key(key) {}
-  virtual ~PutCommand() { delete key; }
+  Type get_type() const { return Type::PUT; }
 
-  Type get_type() const {
-    return Type::PUT;
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    if (kv.has_pdf(key)) {
+      PartialDataFrame &pdf = kv.get_pdf(key);
+      ReadCursor rc(data->len(), data->ptr());
+      pdf.add_df_chunk(rc);
+      return true;
+    }
+    return false;
   }
-
-  optional<sized_ptr<uint8_t>> run(KV &kv, IpV4Addr &src);
 
   void serialize(WriteCursor &wc) const {
-    key->serialize(wc);
-    data->serialize(wc);
+    pack(wc, Type::PUT);
+    pack(wc, key);
+    pack(wc, sized_ptr<uint8_t>(data->len(), data->ptr()));
   }
-  
-  ostream &print(ostream &output) const {
-    output << "key: " << *key << ", data: " << *data;
+
+  ostream &out(ostream &output) const {
+    output << "PUT(key: " << key << ", data: " << *data << ")";
     return output;
   }
 };
 
 class NewCommand : public Command {
-
-  const std::string *name;
-  Schema *scm;
+private:
+  Key key;
+  Schema scm;
 
 public:
+  NewCommand(const Key &key, const Schema &scm) : key(key), scm(scm) {}
+  NewCommand(ReadCursor &c) : key(yield<Key>(c)), scm(yield<Schema>(c)) {}
 
-  NewCommand(const std::string *name, Schema *scm): name(name), scm(scm) {}
-  virtual ~NewCommand() { delete name; delete scm; }
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    if (kv.has_pdf(key))
+      return false;
 
-  optional<sized_ptr<uint8_t>> run(KV &kv, IpV4Addr &src);
+    kv.add_pdf(key, scm);
+    return true;
+  }
 
-  Type get_type() const {
-    return Type::PUT;
+  Type get_type() const { return Type::NEW; }
+
+  void serialize(WriteCursor &wc) const {
+    pack(wc, Type::NEW);
+    pack(wc, key);
+    pack(sc, scm);
+  }
+
+  ostream &out(ostream &output) const {
+    output << "NEW(key: " << key << ", scm: " << scm << ")";
+    return output;
+  }
+};
+
+class GetOwnedCommand : public Command {
+public:
+  Type get_type() const { return Type::GET_OWNED; }
+
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    /* pack all the keys for PDFs which have chunk 0 */
+    kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
+      if (e->second.has_chunk(0))
+        pack(dest, e->first);
+    });
+    return true;
   }
 
   void serialize(WriteCursor &wc) const {
-    pack<const std::string &>(wc, *name);
-    // something with schema
+    pack(wc, Type::GET);
+    pack(wc, key);
+    pack(wc, chunk_idx);
   }
-  
-  ostream &print(ostream &output) const {
-    char scm_str[scm->width()];
-    scm->c_str(scm_str);
-    output << "name: " << *name << ", schema: " << scm_str;
+
+  ostream &out(ostream &output) const {
+    output << "GET(key: " << key << ", chunk_idx: " << chunk_idx << ")";
     return output;
   }
 };
@@ -127,37 +162,20 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
 }
 
 ostream &operator<<(ostream &output, const Command &c) {
-  output << "Command<" << (void *)&c << ">(type: " << c.get_type() << ", ";
-  c.print(output);
-  output << ")";
+  c.out(output);
   return output;
 }
 
-shared_ptr<Command> deserialize_command(ReadCursor &c) {
-  Command::Type type(yield<Command::Type>(c));
-
-  if (type == Command::Type::GET) {
-      Command* command = dynamic_cast<Command*>(new GetCommand(new ChunkKey(c)));
-      return std::shared_ptr<Command>(command);
+unique_ptr<Command> Command::unpack(ReadCursor &c) {
+  Command::Type type = yield<Command::Type>(c);
+  switch (type) {
+  case Command::Type::GET:
+    return make_unique<GetCommand>(c);
+  case Command::Type::PUT:
+    return make_unique<GetCommand>(c);
+  case Command::Type::NEW:
+    return make_unique<GetCommand>(c);
+  default:
+    assert(false); // unknown type
   }
-
-  if (type == Command::Type::PUT) {
-      ChunkKey* key = new ChunkKey(c);
-      std::unique_ptr<DataChunk> data(new DataChunk(c));
-      Command* command = dynamic_cast<Command*>(new PutCommand(key, move(data)));
-      return std::shared_ptr<Command>(move(command));
-  }
-
-  if (type == Command::Type::NEW) {
-      std::string* name = new std::string(yield<std::string>(c));
-      // placeholder
-      Schema* s = new Schema("F");
-      Command* command = dynamic_cast<Command*>(new NewCommand(name, s));
-      return std::shared_ptr<Command>(command);
-  }
-
-  cout << "EXPECTED: OneOf[" << Command::Type::GET << "," << Command::Type::PUT << ","
-       << Command::Type::NEW << "] was: " << type << endl;
-  assert(false); // unknown type/malformed bytes
 }
-

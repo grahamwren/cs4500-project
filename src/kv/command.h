@@ -159,8 +159,10 @@ public:
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
     /* pack all the keys for PDFs which have chunk 0 */
     kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
-      if (e.second.has_chunk(0))
+      if (e.second.has_chunk(0)) {
         pack<const Key &>(dest, e.first);
+        pack<const Schema &>(dest, e.second.get_schema());
+      }
     });
     return true;
   }

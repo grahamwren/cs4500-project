@@ -176,21 +176,25 @@ TEST_F(TestCommandRun, test_get_owned) {
   EXPECT_TRUE(cmd.run(*kv, 0, dest));
 
   ReadCursor rc(dest.length(), dest.bytes());
-  vector<Key> results;
+  vector<Key> key_results;
+  vector<Schema> scm_results;
   /* yield results until rc is empty */
   for (int i = 0; has_next(rc); i++) {
-    results.emplace_back(yield<Key>(rc));
+    key_results.emplace_back(yield<Key>(rc));
+    scm_results.emplace_back(yield<Schema>(rc));
   }
+  EXPECT_TRUE(empty(rc));
 
   /* expect results to only be the keys for owned PDFs
    * (which have chunk_idx: 0) */
-  EXPECT_EQ(results.size(), 4);
+  EXPECT_EQ(key_results.size(), 4);
+  EXPECT_EQ(scm_results.size(), 4);
 
   /* expect results to contain all "owned \d" keys */
   for (int i = 0; i < 4; i++) {
     sprintf(buf, "owned %i", i);
     Key k = Key(string(buf)); // -Wvexing-parse
-    EXPECT_FALSE(find(results.begin(), results.end(), k) == results.end());
+    EXPECT_FALSE(find(key_results.begin(), key_results.end(), k) ==
+                 key_results.end());
   }
-  EXPECT_TRUE(empty(rc));
 }

@@ -22,12 +22,32 @@ to find the parts it does not own (see Implementation for more).
 
 ![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-assignment_1-part2/raw/master/diagram.png)
 
-The Application class represents an operation that makes use of the KV store to
-manipulate dataframes. Applications access the KV through a KDStore, the "D"
-being short for `DataFrame`.  The KV class utilizes the network to manage blobs
-of serialized data.  A KV on a node owns a number of blobs, and knows about the
-blobs owned by other KVs, through `ownership_mapping`. Each KV has
-potentially several chunks of each blob.
+The ClusterSDK class has the ability to make use of the KV store to manipulate
+dataframes. The SDK accesses the KV store through the KV class. The KV class
+provides an interface to run Commands in the KV store.  Commands are
+serializable objects that do something with the store.  Standard commands are
+GET, PUT, NEW, GETOWNED, and MAP.  The KV store is distributed over the
+network, and a local KV Store class (different from the KV class) is present on
+each node.  The KV class communicates with the local KV by serializing and
+deserializing commands.
+
+This implementation differs from previous implementations in the fact that the
+"Application" (the ClusterSDK + user code) is not running as a node
+participating in the network, but rather, communicating with the network.  This
+means an application has to send a message to the machine it's running on in
+order to run commands locally, rather than having a separate, faster implementation
+for local operations.
+
+The local KV store, represented by the KVStore object, contains chunks of data
+frames grouped in the PartialDataFrame class.  The chunks are organized by the
+ClusterSDK.  When a new piece of data is added, a random owner is chosen from
+the cluster.  The data is then distributed round-robin over the nodes, in fixed
+size chunks.  Calculating the node which a specific chunk is at is a matter
+of finding the owner, and taking the chunk index modulo number of nodes.
+
+Keys in the KV Store are strings, though one string can represent data spread
+over several nodes.  A string key combined with an index can be used to get
+specific chunks.
 
 When `put` is called with a new key, the KV adds the new mapping to its
 ownership map and broadcasts a corresponding message to the other nodes in the
@@ -39,23 +59,20 @@ traversing them as a ring, starting at the node where the put request was made.
 The `DataFrame` object itself is a virtual dataframe, that is, it delegates
 to the KV in order to perform its operations.
 
-A computation is run on a dataframe by calling `map` with a `Rower`, either on
-a `DataFrame` object, or on a KDStore by providing the dataframe's key. The
-`DataFrame` runs the computation on the chunks contained in the current node,
-while using the network to ask for the results of the computation run on chunks
-stored in other nodes. The computation runs in parallel, so rows are likely
-processed out of order. The results, however, are joined in order.
-
-A fixed set of `Rower`s have to be defined at compile time, along with a
-serialization/deserialization method for them. This is because the Rowers must
-be sent over the network, and arbitrary C++ code cannot be serialized in our
-system.
+A computation is run on a dataframe by issuing a `MAP` command with a `Rower`.
+Rowers can be serialized, and in a `MAP`, one Rower is sent over the network
+for each chunk in a piece of data. When a node receives a Rower, it runs the
+computation on the requested chunk.  Then, the Rower is reserialized and sent
+back to the application.  Once the application receives all the individual
+Rowers, it joins them using join_delete.  The computation runs in parallel,
+so rows are likely processed out of order. The results, however, are joined
+in order.
 
 A `Node` is the low-level interface to the networking layer. The node will
 handle network commands automatically, and takes a callback for handling
 application commands. The callback, set through `set_data_handler` by the KV,
-will be used by the KV to asynchronously handle Application level requests made
-of this Node by other Nodes in the cluster.
+will be used by the KV to handle Application level requests made of this Node
+by other Nodes in the cluster.
 
 # Use cases
 
@@ -304,8 +321,7 @@ data would be lost.
 
 # Status
 
-The networking layer is mostly done, aside from the callback with the
-interpreter. The existing codebase has been migrated to C++. The
-implementation for `DataFrame` has to be moved to `DataFrameChunk`, and the
-`DataFrame` itself reimplemented to perform its operations using a `KV`.
-Speaking of, the `KV` itself needs to be implemented.
+`map` is not yet implemented, though computations can be written using get and put.
+
+Once map works, the word count application should be simple.
+

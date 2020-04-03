@@ -7,6 +7,7 @@ EAU2 is a system for distributing data over a network and running computations
 in parallel over that data. EAU2 uses a distributed key value store to manage
 multiple dataframes which may be larger than memory and communication over
 TCP/IP to orchestrate parallel computations over those dataframes.
+
 # Architecture
 
 EAU2 has three layers. The **Application** layer is where programs are written
@@ -24,29 +25,29 @@ to find the parts it does not own (see Implementation for more).
 
 The ClusterSDK class has the ability to make use of the KV store to manipulate
 dataframes. The SDK accesses the KV store through the KV class. The KV class
-provides an interface to run Commands in the KV store.  Commands are
-serializable objects that do something with the store.  Standard commands are
-GET, PUT, NEW, GETOWNED, and MAP.  The KV store is distributed over the
+provides an interface to run Commands in the KV store. Commands are
+serializable objects that do something with the store. Standard commands are
+GET, PUT, NEW, GETOWNED, and MAP. The KV store is distributed over the
 network, and a local KV Store class (different from the KV class) is present on
-each node.  The KV class communicates with the local KV by serializing and
+each node. The KV class communicates with the local KV by serializing and
 deserializing commands.
 
 This implementation differs from previous implementations in the fact that the
 "Application" (the ClusterSDK + user code) is not running as a node
-participating in the network, but rather, communicating with the network.  This
+participating in the network, but rather, communicating with the network. This
 means an application has to send a message to the machine it's running on in
 order to run commands locally, rather than having a separate, faster implementation
 for local operations.
 
 The local KV store, represented by the KVStore object, contains chunks of data
-frames grouped in the PartialDataFrame class.  The chunks are organized by the
-ClusterSDK.  When a new piece of data is added, a random owner is chosen from
-the cluster.  The data is then distributed round-robin over the nodes, in fixed
-size chunks.  Calculating the node which a specific chunk is at is a matter
+frames grouped in the PartialDataFrame class. The chunks are organized by the
+ClusterSDK. When a new piece of data is added, a random owner is chosen from
+the cluster. The data is then distributed round-robin over the nodes, in fixed
+size chunks. Calculating the node which a specific chunk is at is a matter
 of finding the owner, and taking the chunk index modulo number of nodes.
 
 Keys in the KV Store are strings, though one string can represent data spread
-over several nodes.  A string key combined with an index can be used to get
+over several nodes. A string key combined with an index can be used to get
 specific chunks.
 
 When `put` is called with a new key, the KV adds the new mapping to its
@@ -62,9 +63,9 @@ to the KV in order to perform its operations.
 A computation is run on a dataframe by issuing a `MAP` command with a `Rower`.
 Rowers can be serialized, and in a `MAP`, one Rower is sent over the network
 for each chunk in a piece of data. When a node receives a Rower, it runs the
-computation on the requested chunk.  Then, the Rower is reserialized and sent
-back to the application.  Once the application receives all the individual
-Rowers, it joins them using join_delete.  The computation runs in parallel,
+computation on the requested chunk. Then, the Rower is reserialized and sent
+back to the application. Once the application receives all the individual
+Rowers, it joins them using join_delete. The computation runs in parallel,
 so rows are likely processed out of order. The results, however, are joined
 in order.
 
@@ -86,15 +87,13 @@ input_file.sor:
 ```
 
 ```cpp
-Node node(... ip addr of existing node in cluster ...);
-KV kv(node);
+Key key("example");
+Cluster cluster(IpV4Addr("<ip in cluster>"));
 
-Schema* scm = Parser::infer_file_schema("input_file.sor");
-DataFrame *df = kv.create("example", *scm);
-Parser::load_file(*df, "input_file.sor");
+cluster.load_from_file(key, "input_file.sor");
 
 SumRower r;
-kv.map("example", *r);
+cluster.map("example", r);
 
 > r.result
 21
@@ -264,12 +263,9 @@ First chapter of Moby Dick or The Whale. Obtained from [archive.org](https://arc
 </details>
 
 ```cpp
-Node node(... ip addr of existing node in cluster ...);
-KV kv(node);
-
-Schema* scm = Parser::infer_file_schema("loomings.sor");
-DataFrame *df = kv.create("example", *scm);
-Parser::load_file(*df, "input_file.sor");
+Key key("loomings");
+Cluster cluster(IpV4Addr("<ip in cluster>"));
+cluster.load_from_file(key, "loomings.sor");
 
 class WCRower : public Rower {
 public:
@@ -296,11 +292,11 @@ public:
   }
 };
 
-WCRower rower;
-df.map(rower);
+WordCountRower rower;
+cluster.map(key, rower);
 
 for (auto it = rower.results.begin(); it != rower.results.end(); it++) {
-    cout << "word: " << it->first << ", count: " << it->second << endl;
+  cout << "word: " << it->first << ", count: " << it->second << endl;
 }
 ```
 
@@ -324,4 +320,3 @@ data would be lost.
 `map` is not yet implemented, though computations can be written using get and put.
 
 Once map works, the word count application should be simple.
-

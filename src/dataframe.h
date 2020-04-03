@@ -120,7 +120,7 @@ public:
     bool accept = true;
     string *s;
     string *os;
-    if (schema.equals(other.get_schema()) && nrows() == other.nrows()) {
+    if (schema == other.get_schema() && nrows() == other.nrows()) {
       for (int x = 0; x < ncols(); x++) {
         Data::Type t = schema.col_type(x);
         for (int y = 0; y < nrows(); y++) {

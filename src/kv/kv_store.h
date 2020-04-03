@@ -29,6 +29,7 @@ PartialDataFrame &KVStore::get_pdf(const Key &key) {
 }
 
 PartialDataFrame &KVStore::add_pdf(const Key &key, const Schema &schema) {
+  assert(!has_pdf(key));
   data.emplace(key, schema);
   return get_pdf(key);
 }

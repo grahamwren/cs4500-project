@@ -51,7 +51,7 @@ TEST_F(TestParser, test__infer_schema) {
   EXPECT_EQ(n_scm.col_type(2), Data::Type::STRING);
   EXPECT_EQ(n_scm.col_type(3), Data::Type::BOOL);
   EXPECT_EQ(n_scm.col_type(4), Data::Type::MISSING);
-  EXPECT_TRUE(n_scm.equals(*scm));
+  EXPECT_TRUE(n_scm == *scm);
 }
 
 TEST_F(TestParser, test__parse_file) {

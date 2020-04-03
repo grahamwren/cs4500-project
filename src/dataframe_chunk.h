@@ -3,6 +3,7 @@
 #include "column.h"
 #include "data.h"
 #include "dataframe.h"
+#include <algorithm>
 #include <vector>
 
 #ifndef DF_CHUNK_SIZE
@@ -146,5 +147,14 @@ public:
       fill_row(i, row);
       rower.accept(row);
     }
+  }
+
+  bool operator==(const DataFrameChunk &other) const {
+    return start_idx == other.start_idx && nrows() == other.nrows() &&
+           get_schema() == other.get_schema() &&
+           equal(columns.begin(), columns.end(), other.columns.begin(),
+                 [](const unique_ptr<Column> &l, const unique_ptr<Column> &r) {
+                   return l->equals(*r);
+                 });
   }
 };

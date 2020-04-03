@@ -147,7 +147,7 @@ public:
     return types.size();
   }
 
-  bool equals(const Schema &other) const {
+  bool operator==(const Schema &other) const {
     return types.size() == other.types.size() &&
            equal(types.begin(), types.end(), other.types.begin()) &&
            columns.size() == other.columns.size() &&

@@ -156,7 +156,7 @@ public:
     bool accept = true;
     string *s;
     string *os;
-    if (schema.equals(other.get_schema())) {
+    if (schema == other.get_schema()) {
       for (int x = 0; x < schema.width(); x++) {
         if (is_missing(x)) {
           accept = other.is_missing(x);

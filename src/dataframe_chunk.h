@@ -29,7 +29,14 @@ public:
     }
   }
 
-  DataFrameChunk(const Schema &scm) : DataFrameChunk(scm, 0) {}
+  DataFrameChunk(const Schema &scm, ReadCursor &rc)
+      : DataFrameChunk(scm, yield<int>(rc)) {
+    int len = yield<int>(rc);
+    /* fill each column from left to right */
+    for (int i = 0; i < schema.width(); i++) {
+      columns[i]->fill(len, rc);
+    }
+  }
 
   DataFrameChunk(DataFrameChunk &&) noexcept = default;
   DataFrameChunk(const DataFrameChunk &) = delete;
@@ -38,15 +45,6 @@ public:
 
   int get_start() const { return start_idx; }
   int chunk_idx() const { return get_start() / DF_CHUNK_SIZE; }
-
-  void fill(ReadCursor &rc) {
-    start_idx = yield<int>(rc);
-    int len = yield<int>(rc);
-    /* fill each column from left to right */
-    for (int i = 0; i < schema.width(); i++) {
-      columns[i]->fill(len, rc);
-    }
-  }
 
   void serialize(WriteCursor &wc) const {
     pack(wc, get_start());
@@ -158,5 +156,9 @@ public:
                  [](const unique_ptr<Column> &l, const unique_ptr<Column> &r) {
                    return l->equals(*r);
                  });
+  }
+
+  bool operator<(const DataFrameChunk &other) const {
+    return start_idx < other.start_idx;
   }
 };

@@ -1,11 +1,12 @@
-#include "kv/kv.h"
+#pragma once
+
+#include "sdk/cluster.h"
 
 class Application {
 protected:
-  KV kv;
+  Cluster cluster;
 
 public:
-  Application(const IpV4Addr &ip, const IpV4Addr &server_a)
-      : kv(ip, server_a) {}
-  ~Application() { kv.teardown(); }
+  Application(const IpV4Addr &ip) : cluster(ip) {}
+  ~Application() { cluster.shutdown(); }
 };

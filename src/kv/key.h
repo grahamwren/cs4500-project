@@ -11,10 +11,17 @@ using namespace std;
 class Key {
 public:
   string name;
+  Key() = default;
+  Key(const Key &) = default;
+  Key(const char *name) : name(name) {}
   Key(const string &name) : name(name) {}
 
   bool operator==(const Key &other) const {
     return name.compare(other.name) == 0;
+  }
+
+  bool operator<(const Key &other) const {
+    return name.compare(other.name) < 0;
   }
 };
 

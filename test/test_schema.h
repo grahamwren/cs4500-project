@@ -4,32 +4,30 @@ class TestSchema : public ::testing::Test {
 public:
   Schema *scm;
   void SetUp() {
-    scm = new Schema("");
-    scm->add_column('I', new string("id"));
-    scm->add_column('S', new string("name"));
+    scm = new Schema;
+    scm->add_column('I');
+    scm->add_column('S');
   }
 
   void Teardown() { delete scm; }
 };
 
-TEST_F(TestSchema, test_add_column_col_name) {
-  EXPECT_STREQ(scm->col_name(0)->c_str(), "id");
-  scm->add_column('I', new string("age"));
-  EXPECT_STREQ(scm->col_name(2)->c_str(), "age");
+TEST_F(TestSchema, test_add_column_col_type) {
+  EXPECT_EQ(scm->col_type(0), Data::Type::INT);
+  scm->add_column('F');
+  EXPECT_EQ(scm->col_type(2), Data::Type::FLOAT);
 }
 
-TEST_F(TestSchema, test_col_idx_width) {
-  EXPECT_EQ(scm->col_idx(new string("id")), 0);
+TEST_F(TestSchema, test_width) {
   EXPECT_EQ(scm->width(), 2);
-  scm->add_column('I', new string("age"));
-  EXPECT_EQ(scm->col_idx(new string("age")), 2);
+  scm->add_column('I');
   EXPECT_EQ(scm->width(), 3);
 }
 
 TEST_F(TestSchema, test_equals) {
-  Schema other("");
+  Schema other;
   EXPECT_FALSE(other == *scm);
-  other.add_column('I', new string("id"));
-  other.add_column('S', new string("name"));
+  other.add_column('I');
+  other.add_column('S');
   EXPECT_TRUE(other == *scm);
 }

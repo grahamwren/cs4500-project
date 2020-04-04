@@ -12,19 +12,12 @@ using namespace std;
 /*************************************************************************
  * Schema::
  * A schema is a description of the contents of a data frame, the schema
- * knows the number of columns and number of rows, the type of each column,
- * optionally columns can be named by strings.
+ * knows the number of columns and the type of each column.
  * The valid types are represented by the chars 'S', 'B', 'I' and 'F'.
  */
 class Schema {
 protected:
   vector<Data::Type> types;
-  vector<string *> columns; // OWNED
-
-  void add_col_name(const string *s) {
-    string *n_s = s ? new string(*s) : nullptr;
-    columns.push_back(n_s);
-  }
 
 public:
   Schema() = default;
@@ -32,39 +25,7 @@ public:
   /**
    * Copying constructor
    */
-  Schema(const Schema &from) : types(from.types) {
-    for (int i = 0; i < from.width(); i++) {
-      add_col_name(from.col_name(i));
-    }
-  }
-
-  Schema(Schema &&scm) : types(scm.types) {
-    for (int i = 0; i < scm.columns.size(); i++) {
-      columns.push_back(scm.columns[i]);
-      scm.columns[i] = nullptr;
-    }
-  }
-
-  /**
-   * move assignment operator
-   */
-  Schema &operator=(Schema &&scm) {
-    if (this == &scm)
-      return *this;
-
-    types = scm.types;
-    /* delete all of our column names */
-    while (columns.size()) {
-      delete columns.back();
-      columns.pop_back();
-    }
-    /* get and clear all the column names from scm */
-    for (int i = 0; i < scm.columns.size(); i++) {
-      columns.push_back(scm.columns[i]);
-      scm.columns[i] = nullptr;
-    }
-    return *this;
-  }
+  Schema(const Schema &from) : types(from.types) {}
 
   /**
    * Create a schema from a string of types. A string that contains
@@ -75,44 +36,26 @@ public:
   Schema(const char *types_carr) {
     int len = strlen(types_carr);
     for (int i = 0; i < len; i++) {
-      add_column(Data::char_as_type(types_carr[i]), nullptr);
+      types.push_back(Data::char_as_type(types_carr[i]));
     }
   }
 
-  ~Schema() {
-    for (int i = 0; i < width(); i++)
-      delete col_name(i);
-  }
+  /**
+   * Add a column of the given type
+   */
+  void add_column(Data::Type type) { types.push_back(type); }
 
   /**
-   * Add a column of the given type and name (can be nullptr), name
-   * is external.
+   * Add a column of the given type char: [I, F, ...]
    */
-  void add_column(char type, string *name) {
-    add_column(Data::char_as_type(type), name);
-  }
+  void add_column(char c) { types.push_back(Data::char_as_type(c)); }
 
   /**
-   * Add a column of the given type and name (can be nullptr), name
-   * is external.
+   * set a type in this Schema, used by parser when deducing types
    */
-  void add_column(Data::Type type, string *name) {
-    types.push_back(type);
-    add_col_name(name);
-  }
-
   void set_type(int i, Data::Type type) {
     assert(width() > i);
     types[i] = type;
-  }
-
-  /**
-   * Return name of column at idx; nullptr indicates no name given.
-   * An idx >= width is undefined.
-   */
-  const string *col_name(int idx) const {
-    assert(idx < width());
-    return columns[idx];
   }
 
   /**
@@ -120,41 +63,17 @@ public:
    */
   Data::Type col_type(int idx) const {
     assert(idx < width());
-
     return types[idx];
-  }
-
-  /**
-   * Given a column name return its index, or -1.
-   */
-  int col_idx(const string *name) const {
-    int width = columns.size();
-    for (int i = 0; i < width; i++) {
-      string *s = columns[i];
-      if (s == nullptr && name == nullptr)
-        return i;
-      else if (name && s && name->compare(*s) == 0)
-        return i;
-    }
-    return -1;
   }
 
   /**
    * The number of columns
    */
-  int width() const {
-    assert(types.size() == columns.size());
-    return types.size();
-  }
+  int width() const { return types.size(); }
 
   bool operator==(const Schema &other) const {
     return types.size() == other.types.size() &&
-           equal(types.begin(), types.end(), other.types.begin()) &&
-           columns.size() == other.columns.size() &&
-           equal(columns.begin(), columns.end(), other.columns.begin(),
-                 [](const string *l, const string *r) {
-                   return l == nullptr ? r == nullptr : l->compare(*r) == 0;
-                 });
+           equal(types.begin(), types.end(), other.types.begin());
   }
 
   /**

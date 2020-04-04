@@ -15,7 +15,7 @@ using namespace std;
 
 class Command {
 public:
-  enum Type : uint8_t { GET, PUT, NEW, GET_OWNED, MAP };
+  enum Type : uint8_t { GET, PUT, NEW, GET_DF_INFO, MAP };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
   virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) const = 0;
@@ -28,19 +28,19 @@ public:
 
 class GetCommand : public Command {
 private:
-  Key key;
-  int chunk_idx;
+  ChunkKey ckey;
 
 public:
-  GetCommand(const Key &key, int i) : key(key), chunk_idx(i) {}
-  GetCommand(ReadCursor &c) : key(yield<Key>(c)), chunk_idx(yield<int>(c)) {}
+  GetCommand(const ChunkKey &ckey) : ckey(ckey) {}
+  GetCommand(const Key &key, int i) : ckey(key, i) {}
+  GetCommand(ReadCursor &c) : ckey(yield<Key>(c), yield<int>(c)) {}
   Type get_type() const { return Type::GET; }
 
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
-    if (kv.has_pdf(key)) {
-      PartialDataFrame &pdf = kv.get_pdf(key);
-      if (pdf.has_chunk(chunk_idx)) {
-        const DataFrameChunk &dfc = pdf.get_chunk_by_chunk_idx(chunk_idx);
+    if (kv.has_pdf(ckey.key)) {
+      PartialDataFrame &pdf = kv.get_pdf(ckey.key);
+      if (pdf.has_chunk(ckey.chunk_idx)) {
+        const DataFrameChunk &dfc = pdf.get_chunk_by_chunk_idx(ckey.chunk_idx);
         dfc.serialize(dest);
         return true;
       }
@@ -50,19 +50,18 @@ public:
 
   void serialize(WriteCursor &wc) const {
     pack(wc, get_type());
-    pack<const Key &>(wc, key);
-    pack(wc, chunk_idx);
+    pack<const ChunkKey &>(wc, ckey);
   }
 
   ostream &out(ostream &output) const {
-    output << "(key: " << key << ", chunk_idx: " << chunk_idx << ")";
+    output << ckey;
     return output;
   }
 
   bool equals(const Command &o) const {
     if (get_type() == o.get_type()) {
       const GetCommand &other = dynamic_cast<const GetCommand &>(o);
-      return chunk_idx == other.chunk_idx && key == other.key;
+      return ckey == other.ckey;
     }
     return false;
   }
@@ -70,22 +69,27 @@ public:
 
 class PutCommand : public Command {
 private:
-  Key key;
+  ChunkKey chunk_key;
   std::unique_ptr<DataChunk> data;
 
 public:
-  PutCommand(const Key &key, unique_ptr<DataChunk> &&dc)
-      : key(key), data(move(dc)) {}
+  PutCommand(const ChunkKey &chunk_key, unique_ptr<DataChunk> &&dc)
+      : chunk_key(chunk_key), data(move(dc)) {}
   PutCommand(ReadCursor &c)
-      : key(yield<Key>(c)), data(new DataChunk(yield<sized_ptr<uint8_t>>(c))) {}
+      : chunk_key(yield<ChunkKey>(c)),
+        data(new DataChunk(yield<sized_ptr<uint8_t>>(c))) {}
 
   Type get_type() const { return Type::PUT; }
 
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
-    if (kv.has_pdf(key)) {
-      PartialDataFrame &pdf = kv.get_pdf(key);
+    if (kv.has_pdf(chunk_key.key)) {
+      PartialDataFrame &pdf = kv.get_pdf(chunk_key.key);
       ReadCursor rc(data->len(), data->ptr());
-      pdf.add_df_chunk(rc);
+      if (pdf.has_chunk(chunk_key.chunk_idx)) {
+        pdf.replace_df_chunk(chunk_key.chunk_idx, rc);
+      } else {
+        pdf.add_df_chunk(chunk_key.chunk_idx, rc);
+      }
       return true;
     }
     return false;
@@ -93,19 +97,19 @@ public:
 
   void serialize(WriteCursor &wc) const {
     pack(wc, get_type());
-    pack<const Key &>(wc, key);
+    pack<const ChunkKey &>(wc, chunk_key);
     pack(wc, data->data());
   }
 
   ostream &out(ostream &output) const {
-    output << "(key: " << key << ", data: " << *data << ")";
+    output << "key: " << chunk_key << ", data: " << *data;
     return output;
   }
 
   bool equals(const Command &o) const {
     if (get_type() == o.get_type()) {
       const PutCommand &other = dynamic_cast<const PutCommand &>(o);
-      return key == other.key &&
+      return chunk_key == other.chunk_key &&
              (data && other.data ? *data == *other.data : data == other.data);
     }
     return false;
@@ -138,7 +142,7 @@ public:
   }
 
   ostream &out(ostream &output) const {
-    output << "(key: " << key << ", scm: " << scm << ")";
+    output << "key: " << key << ", scm: " << scm;
     return output;
   }
 
@@ -151,31 +155,80 @@ public:
   }
 };
 
-class GetOwnedCommand : public Command {
+class GetDFInfoCommand : public Command {
+private:
+  optional<Key> query_key;
+
 public:
-  GetOwnedCommand() = default;
-  GetOwnedCommand(ReadCursor &c) {}
-  Type get_type() const { return Type::GET_OWNED; }
+  typedef tuple<Key, optional<Schema>, int> result_t;
+
+  GetDFInfoCommand() = default;
+  GetDFInfoCommand(const optional<Key> &key) : query_key(key) {}
+  GetDFInfoCommand(const Key &key) : query_key(key) {}
+  GetDFInfoCommand(ReadCursor &c) {
+    if (yield<bool>(c))
+      query_key = yield<Key>(c);
+  }
+  Type get_type() const { return Type::GET_DF_INFO; }
 
   bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
-    /* pack all the keys for PDFs which have chunk 0 */
-    kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
-      if (e.second.has_chunk(0)) {
-        pack<const Key &>(dest, e.first);
-        pack<const Schema &>(dest, e.second.get_schema());
+    /* if command has query_key, just get info for this query_key */
+    if (query_key) {
+      if (kv.has_pdf(*query_key)) {
+        const PartialDataFrame &pdf = kv.get_pdf(*query_key);
+        pack<const Key &>(dest, *query_key);
+        if (pdf.has_chunk(0)) {
+          pack<bool>(dest, true); // pack true if this Node has chunk 0
+          pack<const Schema &>(dest, pdf.get_schema());
+        } else {
+          /* pack false because not the owner of this DF */
+          pack<bool>(dest, false);
+        }
+        pack<int>(dest, pdf.largest_chunk_idx());
+        return true;
       }
-    });
-    return true;
+      return false;
+    } else {
+      /* traverse all keys checking for owned DF */
+      kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
+        const Key &key = e.first;
+        const PartialDataFrame &pdf = e.second;
+
+        pack<const Key &>(dest, key);
+        if (pdf.has_chunk(0)) {
+          pack<bool>(dest, true); // pack true if this Node has chunk 0
+          pack<const Schema &>(dest, pdf.get_schema());
+        } else {
+          /* pack false because not the owner of this DF */
+          pack<bool>(dest, false);
+        }
+        pack<int>(dest, pdf.largest_chunk_idx());
+      });
+      return true;
+    }
   }
 
-  void serialize(WriteCursor &wc) const { pack(wc, get_type()); }
-
-  ostream &out(ostream &output) const {
-    output << "()";
-    return output;
+  void serialize(WriteCursor &wc) const {
+    pack(wc, get_type());
+    pack(wc, !!query_key);
+    if (query_key)
+      pack<const Key &>(wc, *query_key);
   }
+
+  ostream &out(ostream &output) const { return output; }
 
   bool equals(const Command &o) const { return get_type() == o.get_type(); }
+
+  static void unpack_results(ReadCursor &c, vector<result_t> &results) {
+    while (has_next(c)) {
+      Key key = yield<Key>(c);
+      if (yield<bool>(c)) {
+        results.emplace_back(make_tuple(key, yield<Schema>(c), yield<int>(c)));
+      } else {
+        results.emplace_back(make_tuple(key, nullopt, yield<int>(c)));
+      }
+    }
+  }
 };
 
 class MapCommand : public Command {
@@ -234,8 +287,8 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
   case Command::Type::MAP:
     output << "MAP";
     break;
-  case Command::Type::GET_OWNED:
-    output << "GET_OWNED";
+  case Command::Type::GET_DF_INFO:
+    output << "GET_DF_INFO";
     break;
   default:
     output << "<unknown Command::Type>";
@@ -244,8 +297,9 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
 }
 
 ostream &operator<<(ostream &output, const Command &c) {
-  output << c.get_type();
+  output << "Command(type: " << c.get_type() << ", ";
   c.out(output);
+  output << ")";
   return output;
 }
 
@@ -258,8 +312,8 @@ unique_ptr<Command> Command::unpack(ReadCursor &c) {
     return make_unique<PutCommand>(c);
   case Command::Type::NEW:
     return make_unique<NewCommand>(c);
-  case Command::Type::GET_OWNED:
-    return make_unique<GetOwnedCommand>(c);
+  case Command::Type::GET_DF_INFO:
+    return make_unique<GetDFInfoCommand>(c);
   case Command::Type::MAP:
     return make_unique<MapCommand>(c);
   default:

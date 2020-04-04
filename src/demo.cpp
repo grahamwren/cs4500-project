@@ -1,39 +1,42 @@
+#include "application.h"
 #include "sdk/cluster.h"
 #include <iostream>
 #include <set>
 
 using namespace std;
 
-#ifndef NUM_ELEMENTS
-#define NUM_ELEMENTS (1000 * 1000)
+#ifndef NUM_ROWS
+#define NUM_ROWS (20 * 1000)
 #endif
 
-class Demo {
+class Demo : public Application {
 public:
   Key data_key;
-  Cluster cluster;
 
-  Demo(const IpV4Addr &ip) : data_key(string("main")), cluster(ip) {}
-
-  ~Demo() { cluster.shutdown(); }
+  Demo(const IpV4Addr &ip) : Application(ip), data_key(string("main")) {}
 
   void fill_cluster() {
     /* create DF */
-    cluster.create(data_key, Schema("I"));
-    const DFInfo &df_info = cluster.get_df_info(data_key);
+    cluster.create(data_key, Schema("ISFB"));
+    const DFInfo &df_info = cluster.get_df_info(data_key)->get();
 
-    /* add rows via PDF */
-    PartialDataFrame pdf(df_info.schema);
-    Row row(df_info.schema);
-    for (int i = 0; i < NUM_ELEMENTS; i++) {
-      row.set(0, i);
-      pdf.add_row(row);
-    }
-
-    /* add chunks to cluster */
-    for (int ci = 0; ci < pdf.nchunks(); ci++) {
-      const DataFrameChunk &dfc = pdf.get_chunk_by_chunk_idx(ci);
-      cluster.put(data_key, dfc);
+    /* add rows via DFC */
+    Row row(df_info.get_schema());
+    // future<bool> last_put;
+    int chunk_i = 0;
+    int row_i = 0;
+    while (row_i < NUM_ROWS) {
+      DataFrameChunk dfc(df_info.get_schema(), row_i);
+      while (!dfc.is_full() && row_i < NUM_ROWS) {
+        row.set(0, row_i);
+        row.set(1, new string("apples"));
+        row.set(2, row_i * 0.5f);
+        row.set(3, row_i % 13 == 0);
+        dfc.add_row(row);
+        row_i++;
+      }
+      cluster.put(data_key, chunk_i, dfc);
+      chunk_i++;
     }
   }
 
@@ -60,7 +63,7 @@ public:
     shared_ptr<SumRower> rower = make_shared<SumRower>(0);
     cluster.map(data_key, rower);
     uint64_t expected_results =
-        ((NUM_ELEMENTS * (uint64_t)(NUM_ELEMENTS + 1)) / 2) - NUM_ELEMENTS;
+        ((NUM_ROWS * (uint64_t)(NUM_ROWS + 1)) / 2) - NUM_ROWS;
     if (rower->get_sum_result() != expected_results)
       cout << "SumRower failed: expected: " << expected_results
            << ", actual: " << rower->get_sum_result() << endl;

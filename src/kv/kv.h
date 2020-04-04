@@ -21,7 +21,6 @@ class KV {
 private:
   Node node;
   KVStore data_store;
-  mutable LRUCache<ChunkKey, DataChunk> cache;
 
 protected:
   /**

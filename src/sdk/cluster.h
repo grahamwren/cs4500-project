@@ -24,17 +24,23 @@ private:
   unordered_map<const Key, DFInfo> dataframes;
 
 protected:
-  const IpV4Addr &find_node_for_chunk(const Key &key, int chunk_idx) const {
-    assert(has_df_info(key));
-    const DFInfo &df_info = dataframes.find(key)->second;
-    auto it = nodes.find(df_info.owner);
-    int offset = chunk_idx % nodes.size();
+  /**
+   * seek in the nodes set, starting at the given ip, forward by dist treating
+   * nodes as a ring-buffer. Undefined behavior if the given ip does not exist
+   * in the nodes set.
+   */
+  const IpV4Addr &seek_in_nodes(const IpV4Addr &start_ip, int dist) const {
+    auto start = nodes.find(start_ip);
+    assert(start != nodes.end());
+
+    int offset = dist % nodes.size();
     for (int i = 0; i < offset; i++) {
-      it++;
-      if (it == nodes.end())
-        it = nodes.begin();
+      start++;
+      if (start == nodes.end()) {
+        start = nodes.begin();
+      }
     }
-    return *it;
+    return *start;
   }
 
   void get_nodes_in_cluster(const IpV4Addr &addr) {
@@ -58,30 +64,10 @@ protected:
     }
   }
 
-  void get_ownership_in_cluster() {
-    for (const IpV4Addr &ip : nodes) {
-      GetOwnedCommand cmd;
-      optional<DataChunk> data = send_cmd(ip, cmd);
-      assert(data);
-
-      // load ownership into map for each key in resp
-      ReadCursor rc(data->data());
-      while (has_next(rc)) {
-        Key key = yield<Key>(rc);
-        /* if haven't seen this key, add to dataframes */
-        if (dataframes.find(key) == dataframes.end()) {
-          Schema scm = yield<Schema>(rc);
-          dataframes.emplace(key, DFInfo(key, scm, ip));
-        } else { // else skip
-          yield<Schema>(rc);
-        }
-      }
-    }
-  }
-
   void connect_to_cluster(const IpV4Addr &addr) {
     get_nodes_in_cluster(addr);
-    get_ownership_in_cluster();
+    bool ownership_res = get_ownership_in_cluster();
+    assert(ownership_res);
   }
 
   optional<DataChunk> send_cmd(const IpV4Addr &ip, const Command &cmd) const {
@@ -102,34 +88,94 @@ protected:
 public:
   Cluster(const IpV4Addr &register_a) { connect_to_cluster(register_a); }
 
-  optional<DataFrameChunk> get(const Key &key, int index) const {
-    const IpV4Addr &ip = find_node_for_chunk(key, index);
-    GetCommand get_cmd(key, index);
-    optional<DataChunk> result = send_cmd(ip, get_cmd);
-    if (result) {
-      const DFInfo &df_info = dataframes.find(key)->second;
-      DataFrameChunk dfc(df_info.schema, index);
-      ReadCursor rc(result->len(), result->ptr());
-      dfc.fill(rc);
-      return move(dfc);
-    } else
-      return nullopt;
+  bool get_ownership_in_cluster(const optional<Key> &query_key = nullopt) {
+    GetDFInfoCommand cmd(query_key);
+    for (const IpV4Addr &ip : nodes) {
+      optional<DataChunk> data = send_cmd(ip, cmd);
+      if (!data)
+        return false;
+
+      ReadCursor rc(data->data());
+      vector<GetDFInfoCommand::result_t> results;
+      GetDFInfoCommand::unpack_results(rc, results);
+
+      /* load ownership into dataframes map for each key in resp */
+      for (auto &e : results) {
+        const Key &key = ::get<Key>(e);
+        const optional<Schema> &scm = ::get<optional<Schema>>(e);
+        int largest_chunk_idx = ::get<int>(e);
+
+        /* if not seen before */
+        if (dataframes.find(key) == dataframes.end()) {
+          if (scm) {
+            /* if response had a Schema, then this IP is the owner */
+            dataframes.emplace(key, DFInfo(key, *scm, ip, largest_chunk_idx));
+          } else {
+            /* not the owner, just add Key and largest_chunk_idx */
+            dataframes.emplace(key, DFInfo(key, largest_chunk_idx));
+          }
+        } else { // else seen before
+          DFInfo &df_info = dataframes.find(key)->second;
+          df_info.try_update_largest_chunk_idx(largest_chunk_idx);
+          if (scm) {
+            df_info.schema = *scm;
+            df_info.owner = ip;
+          }
+        }
+      }
+    }
+    return true;
   }
 
-  bool put(const Key &key, const DataFrameChunk &dfc) const {
-    if (has_df_info(key)) {
-      const IpV4Addr &ip = find_node_for_chunk(key, dfc.chunk_idx());
+  /**
+   * get a chunk by Key and index, returns an optional which will be nullopt if
+   * the Key or chunk do not exist in the cluster.
+   */
+  optional<DataFrameChunk> get(const Key &key, int index) const {
+    auto df_info_opt = get_df_info(key);
+    if (df_info_opt) {
+      const DFInfo &df_info = df_info_opt->get();
+      const IpV4Addr &ip = seek_in_nodes(df_info.get_owner(), index);
+      GetCommand get_cmd(key, index);
+      optional<DataChunk> result = send_cmd(ip, get_cmd);
+      if (result) {
+        ReadCursor rc(result->len(), result->ptr());
+        return DataFrameChunk(df_info.get_schema(), rc);
+      }
+    }
+    return nullopt;
+  }
+
+  /**
+   * put a chunk into the cluster for the given key and at the given chunk_idx.
+   * Undefined behavior of DF with given Key has not been created in the cluster
+   * yet. Returns whether the put was successful or not
+   */
+  bool put(const Key &key, int chunk_idx, const DataFrameChunk &dfc) {
+    auto df_info_opt = get_df_info(key);
+    if (df_info_opt) {
+      DFInfo &df_info = df_info_opt->get();
+      /* update DFInfo for this DF if this is a new chunk_idx */
+      df_info.try_update_largest_chunk_idx(chunk_idx);
+
+      const IpV4Addr &ip = seek_in_nodes(df_info.get_owner(), chunk_idx);
       WriteCursor wc;
       dfc.serialize(wc);
-      PutCommand put_cmd(key, make_unique<DataChunk>(wc)); // TODO: copies data
+
+      /* TODO: DataChunk constructor copies data */
+      PutCommand put_cmd(ChunkKey(key, chunk_idx), make_unique<DataChunk>(wc));
       optional<DataChunk> result = send_cmd(ip, put_cmd);
       return !!result;
     } else
       return false;
   }
 
+  /**
+   * map the given Rower over the cluster, the order with which results are
+   * joined is undefined
+   */
   void map(const Key &key, shared_ptr<Rower> rower) const {
-    if (has_df_info(key)) {
+    if (get_df_info(key)) {
       MapCommand cmd(key, rower);
       for (const IpV4Addr &ip : nodes) {
         optional<DataChunk> result = send_cmd(ip, cmd);
@@ -138,6 +184,9 @@ public:
           rower->join_serialized(rc);
           if (CLUSTER_LOG)
             cout << "Cluster.map(partial_result: " << *rower << ")" << endl;
+        } else {
+          if (CLUSTER_LOG)
+            cout << "ERROR: cluster map failed for node: " << ip << endl;
         }
       }
     }
@@ -145,13 +194,13 @@ public:
 
   bool create(const Key &key, const Schema &schema) {
     /* return failure if DF already exists for this Key */
-    if (has_df_info(key))
+    if (get_df_info(key))
       return false;
 
     /* pick IP to own this DF */
     const IpV4Addr &ip = *nodes.begin();
     /* add to dataframes info mapping */
-    dataframes.emplace(key, DFInfo(key, schema, ip));
+    dataframes.emplace(key, DFInfo(key, schema, ip, 0));
 
     bool success = true;
     NewCommand cmd(key, schema);
@@ -179,12 +228,16 @@ public:
     return success;
   }
 
-  const DFInfo &get_df_info(const Key &key) const {
-    assert(has_df_info(key));
-    return dataframes.find(key)->second;
+  optional<reference_wrapper<const DFInfo>> get_df_info(const Key &key) const {
+    auto it = dataframes.find(key);
+    if (it == dataframes.end())
+      return nullopt;
+    return it->second;
   }
-
-  bool has_df_info(const Key &key) const {
-    return dataframes.find(key) != dataframes.end();
+  optional<reference_wrapper<DFInfo>> get_df_info(const Key &key) {
+    auto it = dataframes.find(key);
+    if (it == dataframes.end())
+      return nullopt;
+    return it->second;
   }
 };

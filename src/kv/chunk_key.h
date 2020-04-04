@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cursor.h"
+#include "kv/key.h"
 #include <iostream>
 #include <string>
 
@@ -8,41 +9,41 @@ using namespace std;
 
 class ChunkKey {
 public:
-  string name;
+  Key key;
   int chunk_idx;
 
   ChunkKey() = default;
-  ChunkKey(const char *ns, int idx) : name(ns), chunk_idx(idx) {}
-  ChunkKey(const string &ns, int idx) : name(ns), chunk_idx(idx) {}
-  ChunkKey(ReadCursor &c) : name(yield<string>(c)), chunk_idx(yield<int>(c)) {}
   ChunkKey(const ChunkKey &) = default;
+  ChunkKey(const char *key, int idx) : key(key), chunk_idx(idx) {}
+  ChunkKey(const string &key, int idx) : key(key), chunk_idx(idx) {}
+  ChunkKey(const Key &key, int idx) : key(key), chunk_idx(idx) {}
 
   bool operator<(const ChunkKey &rhs) const {
-    int nr = name.compare(rhs.name);
-    if (nr == 0) {
-      return chunk_idx < rhs.chunk_idx;
-    } else {
-      return nr < 0;
-    }
-  }
-
-  void serialize(WriteCursor &c) const {
-    pack<const string &>(c, name);
-    pack(c, chunk_idx);
+    return key < rhs.key || (key == rhs.key && chunk_idx < rhs.chunk_idx);
   }
 
   bool operator==(const ChunkKey &other) const {
-    return chunk_idx == other.chunk_idx && name.compare(other.name) == 0;
+    return chunk_idx == other.chunk_idx && key == other.key;
   }
 };
 
+template <>
+inline void pack<const ChunkKey &>(WriteCursor &c, const ChunkKey &ckey) {
+  pack<const Key &>(c, ckey.key);
+  pack(c, ckey.chunk_idx);
+}
+
+template <> inline ChunkKey yield(ReadCursor &c) {
+  return ChunkKey(yield<Key>(c), yield<int>(c));
+}
+
 ostream &operator<<(ostream &output, const ChunkKey &k) {
-  output << "{ name: " << k.name.c_str() << ", idx: " << k.chunk_idx << " }";
+  output << "{ key: " << k.key << ", idx: " << k.chunk_idx << " }";
   return output;
 }
 
 template <> struct hash<ChunkKey> {
   size_t operator()(const ChunkKey &key) const noexcept {
-    return hash<string>{}(key.name) ^ (hash<int>{}(key.chunk_idx) << 1);
+    return hash<const Key>{}(key.key) ^ (hash<int>{}(key.chunk_idx) << 1);
   }
 };

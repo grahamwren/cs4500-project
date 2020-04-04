@@ -31,7 +31,7 @@ public:
    * Add a row at the end of this dataframe. The row is expected to have
    * the right schema and be filled with values, otherwise undefined.
    */
-  virtual void add_row(const Row &row) = 0;
+  virtual void add_row(const Row &row) { assert(false); }
 
   virtual void fill_row(int idx, Row &row) const {
     const Schema &schema = get_schema();
@@ -89,7 +89,7 @@ public:
    * The number of rows in the dataframe.
    * Uses the first column length because from assignment.
    */
-  virtual int nrows() const = 0;
+  virtual int nrows() const { assert(false); }
 
   /**
    * The number of columns in the dataframe.

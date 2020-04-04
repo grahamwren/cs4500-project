@@ -61,7 +61,7 @@ bool Parser::parse_row_types(Schema &scm) {
       scm.set_type(i, t);
     } else {
       assert(scm.width() == i); // no skipping
-      scm.add_column(t, nullptr);
+      scm.add_column(t);
     }
   }
 

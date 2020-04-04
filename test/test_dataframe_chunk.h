@@ -10,7 +10,7 @@ public:
 
   void SetUp() {
     scm = new Schema("ISFB");
-    df = new DataFrameChunk(*scm);
+    df = new DataFrameChunk(*scm, 0);
     row = new Row(*scm);
   }
 

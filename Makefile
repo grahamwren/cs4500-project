@@ -19,7 +19,7 @@ run: run_network
 
 build: $(BUILD_DIR)/demo.exe
 
-valgrind: CCOPTS=$(DEBUG_CCOPTS) -DNUM_ELEMENTS=10000 -DDF_CHUNK_SIZE=4096
+valgrind: CCOPTS=$(DEBUG_CCOPTS) -DNUM_ROWS=10000 -DDF_CHUNK_SIZE=4096
 valgrind: docker_net_valgrind
 
 test: FORCE

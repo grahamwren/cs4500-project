@@ -1,44 +1,30 @@
 #pragma once
 
 #include "dataframe_chunk.h"
+#include <algorithm>
+#include <set>
 #include <unordered_map>
+
+using namespace std;
 
 class PartialDataFrame : public DataFrame {
 protected:
   const Schema schema;
-  vector<DataFrameChunk> chunks;
-  unordered_map<int, int> start_idx_map;
-
-  const DataFrameChunk &get_chunk_by_row(int y) const {
-    int chunk_idx = y / DF_CHUNK_SIZE;
-    return get_chunk_by_chunk_idx(chunk_idx);
-  }
+  unordered_map<int, DataFrameChunk> chunks;
 
 public:
   PartialDataFrame(const Schema &scm) : schema(scm) {}
 
   const Schema &get_schema() const { return schema; }
 
-  int nrows() const {
-    if (chunks.size())
-      return ((chunks.size() - 1) * DF_CHUNK_SIZE) + chunks.back().nrows();
-    return 0;
+  bool has_chunk_by_row(int y) const {
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    return has_chunk(chunk_idx);
   }
 
-  void add_row(const Row &row) {
-    if (chunks.size() == 0) {
-      chunks.emplace_back(schema, 0);
-      start_idx_map.emplace(0, 0);
-    }
-
-    if (chunks.back().is_full()) {
-      int new_start_idx = chunks.back().get_start() + DF_CHUNK_SIZE;
-      chunks.emplace_back(schema, new_start_idx);
-      /* add index of inserted element */
-      start_idx_map.emplace(new_start_idx, chunks.size() - 1);
-    }
-
-    chunks.back().add_row(row);
+  const DataFrameChunk &get_chunk_by_row(int y) const {
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    return get_chunk_by_chunk_idx(chunk_idx);
   }
 
   int get_int(int y, int x) const {
@@ -62,35 +48,53 @@ public:
     return chunk.is_missing(y, x);
   }
 
+  /**
+   * Runs the given rower over the Chunks available in this PartialDataFrame
+   */
   void map(Rower &rower) const {
-    for (const DataFrameChunk &chunk : chunks) {
-      chunk.map(rower);
+    for (auto &e : chunks) {
+      e.second.map(rower);
     }
   }
 
-  void add_df_chunk(ReadCursor &c) {
-    int end_idx = chunks.size() ? chunks.back().get_start() + DF_CHUNK_SIZE : 0;
+  /**
+   * add a DFC at the given chunk_idx, undefined behavior if the chunk_idx
+   * already exists in this PDF
+   */
+  void add_df_chunk(int chunk_idx, ReadCursor &c) {
+    assert(!has_chunk(chunk_idx));
+    chunks.emplace(chunk_idx, DataFrameChunk(schema, c));
+  }
 
-    chunks.emplace_back(schema);
-    DataFrameChunk &chunk = chunks.back();
-    chunk.fill(c);
-
-    assert(chunk.get_start() >= end_idx);
-    start_idx_map.emplace(chunk.get_start(), chunks.size() - 1);
+  /**
+   * replace a DFC at the given chunk_idx, undefined behavior if the chunk_idx
+   * does not exist in this PDF
+   */
+  void replace_df_chunk(int chunk_idx, ReadCursor &c) {
+    assert(has_chunk(chunk_idx));
+    chunks.erase(chunk_idx);
+    add_df_chunk(chunk_idx, c);
   }
 
   bool has_chunk(int chunk_idx) const {
-    int nearest_start_idx = chunk_idx * DF_CHUNK_SIZE;
-    auto it = start_idx_map.find(nearest_start_idx);
-    return it != start_idx_map.end();
+    return chunks.find(chunk_idx) != chunks.end();
   }
 
   const DataFrameChunk &get_chunk_by_chunk_idx(int chunk_idx) const {
     assert(has_chunk(chunk_idx));
-    int nearest_start_idx = chunk_idx * DF_CHUNK_SIZE;
-    auto it = start_idx_map.find(nearest_start_idx);
-    return chunks[it->second];
+    return chunks.find(chunk_idx)->second;
   }
 
   int nchunks() const { return chunks.size(); }
+
+  /**
+   * return largest chunk_idx in this PDF
+   */
+  int largest_chunk_idx() const {
+    int largest_so_far = -1;
+    for (auto &e : chunks) {
+      largest_so_far = max(e.first, largest_so_far);
+    }
+    return largest_so_far;
+  }
 };

@@ -116,8 +116,10 @@ public:
   std::vector<uint8_t> data;
   WriteCursor() = default;
   WriteCursor(int len) { ensure_space(len); }
+  void reset() { data.clear(); }
 
   operator sized_ptr<uint8_t>() { return sized_ptr(length(), bytes()); }
+  operator ReadCursor() { return ReadCursor(length(), bytes()); }
 
   /**
    * handle bytes vector resizing manually. Reserve memory manually growing by

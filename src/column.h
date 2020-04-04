@@ -18,6 +18,8 @@ public:
   Column(const Data::Type t) : type(t) {}
   virtual ~Column() {}
 
+  Data::Type get_type() const { return type; }
+
   static Column *create(Data::Type);
 
   virtual void fill(int, ReadCursor &) = 0;

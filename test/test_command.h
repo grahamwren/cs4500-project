@@ -19,7 +19,7 @@ TEST(TestGetCommand, test_serialize_unpack) {
 TEST(TestPutCommand, test_serialize_unpack) {
   auto s = "Hello world";
   DataChunk dc(strlen(s) + 1, (uint8_t *)s);
-  PutCommand cmd(Key("apples"), make_unique<DataChunk>(dc.data()));
+  PutCommand cmd(ChunkKey("apples", 0), make_unique<DataChunk>(dc.data()));
   WriteCursor wc;
   cmd.serialize(wc);
 
@@ -50,7 +50,7 @@ TEST(TestMapCommand, test_serialize_unpack) {
 }
 
 TEST(TestGetOwnedCommand, test_serialize_unpack) {
-  GetOwnedCommand cmd;
+  GetDFInfoCommand cmd;
   WriteCursor wc;
   cmd.serialize(wc);
 
@@ -66,21 +66,28 @@ public:
 
   void SetUp() {
     kv = new KVStore;
-    /* create "owned" PDFs in kv by adding rows starting at 0 */
+    /* create "owned" PDFs in kv by adding chunks starting at 0 */
     for (int i = 0; i < 4; i++) {
       sprintf(buf, "owned %d", i);
       Key key(buf);
       Schema scm("IFSB");
       PartialDataFrame &pdf = kv->add_pdf(key, scm);
 
+      /* create chunk at 0 */
+      DataFrameChunk dfc(scm, 0);
       Row row(scm);
       for (int i = 0; i < 100; i++) {
         row.set(0, i);
         row.set(1, i * 0.5f);
         row.set(2, new string("iii"));
         row.set(3, i % 2 == 0);
-        pdf.add_row(row);
+        dfc.add_row(row);
       }
+
+      WriteCursor wc;
+      dfc.serialize(wc);
+      ReadCursor rc(wc.length(), wc.bytes());
+      pdf.add_df_chunk(0, rc);
     }
 
     /* create non-owned PDFs by adding DFC with non-zero start_idx */
@@ -105,7 +112,7 @@ public:
       WriteCursor wc;
       dfc.serialize(wc);
       ReadCursor rc(wc.length(), wc.bytes());
-      pdf.add_df_chunk(rc);
+      pdf.add_df_chunk(chunk_idx, rc);
     }
   }
   void Teardown() { delete kv; }
@@ -131,7 +138,8 @@ TEST_F(TestCommandRun, test_put) {
   }
   WriteCursor wc;
   dfc.serialize(wc);
-  PutCommand cmd(key, make_unique<DataChunk>(wc.length(), wc.bytes()));
+  PutCommand cmd(ChunkKey(key, chunk_idx),
+                 make_unique<DataChunk>(wc.length(), wc.bytes()));
   WriteCursor dest;
   /* command should return true to show success */
   EXPECT_TRUE(cmd.run(*kv, 0, dest));
@@ -150,9 +158,8 @@ TEST_F(TestCommandRun, test_get) {
   WriteCursor dest;
   /* command should return true to show success */
   EXPECT_TRUE(cmd.run(*kv, 0, dest));
-  DataFrameChunk dfc(kv->get_pdf(key).get_schema(), 1);
   ReadCursor rc(dest.length(), dest.bytes());
-  dfc.fill(rc);
+  DataFrameChunk dfc(kv->get_pdf(key).get_schema(), rc);
   EXPECT_TRUE(dfc == kv->get_pdf(key).get_chunk_by_chunk_idx(1));
 
   /* chunk at 0 should not exist because is "not-owned" so command should return
@@ -191,33 +198,90 @@ TEST_F(TestCommandRun, test_map) {
   EXPECT_TRUE(empty(rc));
 }
 
-TEST_F(TestCommandRun, test_get_owned) {
-  GetOwnedCommand cmd;
+TEST_F(TestCommandRun, test_get_df_info) {
+  GetDFInfoCommand cmd;
   WriteCursor dest;
   /* command should return true to show success, running command writes output
    * into dest */
   EXPECT_TRUE(cmd.run(*kv, 0, dest));
 
-  ReadCursor rc(dest.length(), dest.bytes());
-  vector<Key> key_results;
-  vector<Schema> scm_results;
-  /* yield results until rc is empty */
-  for (int i = 0; has_next(rc); i++) {
-    key_results.emplace_back(yield<Key>(rc));
-    scm_results.emplace_back(yield<Schema>(rc));
-  }
+  ReadCursor rc = dest;
+  vector<GetDFInfoCommand::result_t> results;
+  GetDFInfoCommand::unpack_results(rc, results);
   EXPECT_TRUE(empty(rc));
 
-  /* expect results to only be the keys for owned PDFs
-   * (which have chunk_idx: 0) */
-  EXPECT_EQ(key_results.size(), 4);
-  EXPECT_EQ(scm_results.size(), 4);
+  /* expect results for all PDFs in KV */
+  EXPECT_EQ(results.size(), 8);
 
-  /* expect results to contain all "owned \d" keys */
+  /* expect results to contain all "owned \d" keys to contain Schemas */
   for (int i = 0; i < 4; i++) {
-    sprintf(buf, "owned %i", i);
-    Key k = Key(string(buf)); // -Wvexing-parse
-    EXPECT_FALSE(find(key_results.begin(), key_results.end(), k) ==
-                 key_results.end());
+    sprintf(buf, "owned %d", i);
+    /* search for element with "owned %d" Key */
+    auto e = find_if(results.begin(), results.end(),
+                     [&](auto &e) { return get<Key>(e) == Key(buf); });
+
+    /* expect element to have been found */
+    EXPECT_TRUE(e != results.end());
+    EXPECT_TRUE(get<Key>(*e) == Key(buf));  // expect key to match
+    EXPECT_TRUE(get<optional<Schema>>(*e)); // expect to have Schema
+    EXPECT_EQ(get<int>(*e), 0);             // expect largest chunk to be 0
   }
+
+  /* expect results to contain all "not-owned \d" keys to contain Schemas */
+  for (int i = 0; i < 4; i++) {
+    sprintf(buf, "not-owned %d", i);
+    /* search for element with "not-owned %d" Key */
+    auto e = find_if(results.begin(), results.end(),
+                     [&](auto &e) { return get<Key>(e) == Key(buf); });
+
+    /* expect element to have been found */
+    EXPECT_TRUE(e != results.end());
+    EXPECT_TRUE(get<Key>(*e) == Key(buf));   // expect key to match
+    EXPECT_FALSE(get<optional<Schema>>(*e)); // expect to not have Schema
+    EXPECT_EQ(get<int>(*e), i + 1);          // expect largest chunk to be i + 1
+  }
+}
+
+TEST_F(TestCommandRun, test_get_df_info__with_query_key__owned) {
+  GetDFInfoCommand cmd(Key("owned 0"));
+  WriteCursor dest;
+  /* command should return true to show success, running command writes output
+   * into dest */
+  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+
+  ReadCursor rc = dest;
+  vector<GetDFInfoCommand::result_t> results;
+  GetDFInfoCommand::unpack_results(rc, results);
+  EXPECT_TRUE(empty(rc));
+
+  /* expect results for one PDF */
+  EXPECT_EQ(results.size(), 1);
+
+  /* expect single result to be for Key("owned 0") */
+  auto e = results.begin();
+  EXPECT_TRUE(get<Key>(*e) == Key("owned 0")); // expect key to match
+  EXPECT_TRUE(get<optional<Schema>>(*e));      // expect to have Schema
+  EXPECT_EQ(get<int>(*e), 0);                  // expect largest chunk to be 0
+}
+
+TEST_F(TestCommandRun, test_get_df_info__with_query_key__not_owned) {
+  GetDFInfoCommand cmd(Key("not-owned 0"));
+  WriteCursor dest;
+  /* command should return true to show success, running command writes output
+   * into dest */
+  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+
+  ReadCursor rc = dest;
+  vector<GetDFInfoCommand::result_t> results;
+  GetDFInfoCommand::unpack_results(rc, results);
+  EXPECT_TRUE(empty(rc));
+
+  /* expect results for one PDF */
+  EXPECT_EQ(results.size(), 1);
+
+  /* expect single result to be for Key("owned 0") */
+  auto e = results.begin();
+  EXPECT_TRUE(get<Key>(*e) == Key("not-owned 0")); // expect key to match
+  EXPECT_FALSE(get<optional<Schema>>(*e));         // expect to not have Schema
+  EXPECT_EQ(get<int>(*e), 1); // expect largest chunk to be 1
 }

@@ -82,10 +82,10 @@ docker_net_valgrind: docker_install
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
 	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/demo.exe --ip 172.168.0.2)
 
-run_network: CCOPTS=$(FAST_CCOPTS)
+run_network: DEBUG=false
 run_network: APP=demo
 run_network: docker_install
-	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
+	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe DEBUG="$(DEBUG)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
@@ -93,7 +93,7 @@ run_network: docker_install
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.2)
 
-run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false
+run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -DCLUSTER_LOG=false
 run_perf: APP=demo
 run_perf: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")

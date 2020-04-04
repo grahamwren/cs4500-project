@@ -8,7 +8,7 @@
 #include <vector>
 
 #ifndef DF_CHUNK_SIZE
-#define DF_CHUNK_SIZE 4096 * 2 * 2
+#define DF_CHUNK_SIZE (4096 * 2)
 #endif
 
 using namespace std;

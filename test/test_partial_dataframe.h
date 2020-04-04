@@ -8,14 +8,14 @@ TEST(TestPartialDataFrame, test_add_row__get) {
   PartialDataFrame pdf(schema);
 
   Row row(schema);
-  for (int i = 0; i < 6 * 1000; i++) {
+  for (int i = 0; i < DF_CHUNK_SIZE * 1.5; i++) {
     row.set(0, i);
     row.set(1, i * 0.5f);
     row.set(2, i % 5 == 0);
     pdf.add_row(row);
   }
 
-  for (int i = 0; i < 6 * 1000; i++) {
+  for (int i = 0; i < DF_CHUNK_SIZE * 1.5; i++) {
     EXPECT_EQ(pdf.get_int(i, 0), i);
     EXPECT_EQ(pdf.get_float(i, 1), i * 0.5f);
     EXPECT_EQ(pdf.get_bool(i, 2), i % 5 == 0);
@@ -36,7 +36,7 @@ TEST(TestPartialDataFrame, test_add_row__map) {
 
   CountDiv2 rower(0);
   pdf.map(rower);
-  EXPECT_EQ(rower.count, 5 * 1000);
+  EXPECT_EQ(rower.get_count(), 5 * 1000);
 }
 
 TEST(TestPartialDataFrame, test_add_df_chunk) {
@@ -98,6 +98,6 @@ TEST(TestPartialDataFrame, test_map_non_contiguous) {
 
   MinMaxInt rower(0);
   pdf.map(rower);
-  EXPECT_EQ(rower.min_int, 0);
-  EXPECT_EQ(rower.max_int, DF_CHUNK_SIZE * 5 - 1);
+  EXPECT_EQ(rower.get_min(), 0);
+  EXPECT_EQ(rower.get_max(), DF_CHUNK_SIZE * 5 - 1);
 }

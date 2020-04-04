@@ -128,6 +128,21 @@ public:
       return false;
   }
 
+  void map(const Key &key, shared_ptr<Rower> rower) const {
+    if (has_df_info(key)) {
+      MapCommand cmd(key, rower);
+      for (const IpV4Addr &ip : nodes) {
+        optional<DataChunk> result = send_cmd(ip, cmd);
+        if (result) {
+          ReadCursor rc(result->len(), result->ptr());
+          rower->join_serialized(rc);
+          if (CLUSTER_LOG)
+            cout << "Cluster.map(partial_result: " << *rower << ")" << endl;
+        }
+      }
+    }
+  }
+
   bool create(const Key &key, const Schema &schema) {
     /* return failure if DF already exists for this Key */
     if (has_df_info(key))

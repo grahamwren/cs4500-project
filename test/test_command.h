@@ -38,6 +38,17 @@ TEST(TestNewCommand, test_serialize_unpack) {
   EXPECT_TRUE(cmd == *cmd2);
 }
 
+TEST(TestMapCommand, test_serialize_unpack) {
+  shared_ptr<SumRower> rower = make_shared<SumRower>(0);
+  MapCommand cmd(Key("apples"), rower);
+  WriteCursor wc;
+  cmd.serialize(wc);
+
+  ReadCursor rc(wc.length(), wc.bytes());
+  unique_ptr<Command> cmd2 = Command::unpack(rc);
+  EXPECT_TRUE(cmd == *cmd2);
+}
+
 TEST(TestGetOwnedCommand, test_serialize_unpack) {
   GetOwnedCommand cmd;
   WriteCursor wc;
@@ -166,6 +177,18 @@ TEST_F(TestCommandRun, test_new) {
   EXPECT_TRUE(kv->has_pdf(new_key));
   /* expect has correct Schema */
   EXPECT_TRUE(kv->get_pdf(new_key).get_schema() == scm);
+}
+
+TEST_F(TestCommandRun, test_map) {
+  Key key(string("owned 0"));
+  shared_ptr<SumRower> rower = make_shared<SumRower>(0);
+  MapCommand cmd(key, rower);
+  WriteCursor dest;
+  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+
+  ReadCursor rc(dest.length(), dest.bytes());
+  EXPECT_EQ(rower->get_sum_result(), yield<uint64_t>(rc));
+  EXPECT_TRUE(empty(rc));
 }
 
 TEST_F(TestCommandRun, test_get_owned) {

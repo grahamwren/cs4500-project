@@ -1,6 +1,12 @@
 #pragma once
 
+#include <iostream>
+
+using namespace std;
+
 class Row;
+class WriteCursor;
+class ReadCursor;
 
 /*******************************************************************************
  *  Rower::
@@ -10,7 +16,9 @@ class Row;
  */
 class Rower {
 public:
+  enum Type : uint8_t { SUM };
   virtual ~Rower() {}
+  virtual Type get_type() const { assert(false); }
 
   /**
    * This method is called once per row. The row object is on loan and
@@ -21,10 +29,44 @@ public:
   virtual bool accept(const Row &r) = 0;
 
   /**
-   * Once traversal of the data frame is complete the rowers that were
-   * split off will be joined.  There will be one join per split. The
-   * original object will be the last to be called join on. The join method
-   * is reponsible for cleaning up memory.
+   * join results from the other rower into the results of this Rower
    */
-  virtual void join_delete(const Rower *other) { delete other; }
+  virtual void join(const Rower &other) { assert(false); }
+
+  /**
+   * serialize self, including type and any args into the write cursor
+   */
+  virtual void serialize(WriteCursor &) const { assert(false); }
+
+  /**
+   * serialize the results of this Rower into the given WriteCursor
+   */
+  virtual void serialize_results(WriteCursor &) const { assert(false); }
+
+  /**
+   * join the result in this rower with the serialized results in the given
+   * Cursor
+   */
+  virtual void join_serialized(ReadCursor &) { assert(false); }
+
+  virtual void out(ostream &output) const { output << "out unimplemented"; }
 };
+
+inline ostream &operator<<(ostream &output, const Rower::Type type) {
+  switch (type) {
+  case Rower::Type::SUM:
+    output << "SUM";
+    break;
+  default:
+    output << "<unknown Rower::Type>";
+    break;
+  }
+  return output;
+}
+
+inline ostream &operator<<(ostream &output, const Rower &rower) {
+  output << "Rower(type: " << rower.get_type() << ", ";
+  rower.out(output);
+  output << ")";
+  return output;
+}

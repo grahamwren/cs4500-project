@@ -97,7 +97,7 @@ TEST_F(TestDataFrame, test_map) {
 
   CountDiv2 rower(0);
   df->map(rower);
-  EXPECT_EQ(rower.count, 50);
+  EXPECT_EQ(rower.get_count(), 50);
 }
 
 TEST_F(TestDataFrame, test_filter) {

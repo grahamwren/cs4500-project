@@ -5,7 +5,7 @@
 using namespace std;
 
 #ifndef NUM_ELEMENTS
-#define NUM_ELEMENTS 10 * 1000 * 1000
+#define NUM_ELEMENTS (1000 * 1000)
 #endif
 
 class Demo {
@@ -56,9 +56,20 @@ public:
     cout << "Full data match, DONE" << endl;
   }
 
+  void map_cluster() {
+    shared_ptr<SumRower> rower = make_shared<SumRower>(0);
+    cluster.map(data_key, rower);
+    uint64_t expected_results =
+        ((NUM_ELEMENTS * (uint64_t)(NUM_ELEMENTS + 1)) / 2) - NUM_ELEMENTS;
+    if (rower->get_sum_result() != expected_results)
+      cout << "SumRower failed: expected: " << expected_results
+           << ", actual: " << rower->get_sum_result() << endl;
+  }
+
   void run() {
     fill_cluster();
     read_from_cluster();
+    map_cluster();
   }
 };
 

@@ -4,6 +4,7 @@
 #include "data_chunk.h"
 #include "kv_store.h"
 #include "network/packet.h"
+#include "rowers.h"
 #include "schema.h"
 #include "sized_ptr.h"
 #include <iostream>
@@ -14,7 +15,7 @@ using namespace std;
 
 class Command {
 public:
-  enum Type : uint8_t { GET, PUT, NEW, GET_OWNED };
+  enum Type : uint8_t { GET, PUT, NEW, GET_OWNED, MAP };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
   virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) const = 0;
@@ -54,7 +55,7 @@ public:
   }
 
   ostream &out(ostream &output) const {
-    output << "GET(key: " << key << ", chunk_idx: " << chunk_idx << ")";
+    output << "(key: " << key << ", chunk_idx: " << chunk_idx << ")";
     return output;
   }
 
@@ -97,7 +98,7 @@ public:
   }
 
   ostream &out(ostream &output) const {
-    output << "PUT(key: " << key << ", data: " << *data << ")";
+    output << "(key: " << key << ", data: " << *data << ")";
     return output;
   }
 
@@ -137,7 +138,7 @@ public:
   }
 
   ostream &out(ostream &output) const {
-    output << "NEW(key: " << key << ", scm: " << scm << ")";
+    output << "(key: " << key << ", scm: " << scm << ")";
     return output;
   }
 
@@ -170,11 +171,53 @@ public:
   void serialize(WriteCursor &wc) const { pack(wc, get_type()); }
 
   ostream &out(ostream &output) const {
-    output << "GET_OWNED()";
+    output << "()";
     return output;
   }
 
   bool equals(const Command &o) const { return get_type() == o.get_type(); }
+};
+
+class MapCommand : public Command {
+private:
+  Key key;
+  shared_ptr<Rower> rower;
+
+public:
+  MapCommand(const Key &key, shared_ptr<Rower> rower) : key(key), rower(rower) {
+    assert(rower);
+  }
+  MapCommand(ReadCursor &c) : key(yield<Key>(c)), rower(unpack_rower(c)) {}
+  Type get_type() const { return Type::MAP; }
+
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    if (kv.has_pdf(key)) {
+      PartialDataFrame &pdf = kv.get_pdf(key);
+      pdf.map(*rower); // local map
+      rower->serialize_results(dest);
+      return true;
+    }
+    return false;
+  }
+
+  void serialize(WriteCursor &wc) const {
+    pack(wc, get_type());
+    pack<const Key &>(wc, key);
+    rower->serialize(wc);
+  }
+
+  ostream &out(ostream &output) const {
+    output << "(key: " << key << ", rower: " << rower->get_type() << ")";
+    return output;
+  }
+
+  bool equals(const Command &o) const {
+    if (get_type() == o.get_type()) {
+      const MapCommand &other = dynamic_cast<const MapCommand &>(o);
+      return key == other.key && rower->get_type() == other.rower->get_type();
+    }
+    return false;
+  }
 };
 
 ostream &operator<<(ostream &output, const Command::Type &t) {
@@ -188,6 +231,12 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
   case Command::Type::NEW:
     output << "NEW";
     break;
+  case Command::Type::MAP:
+    output << "MAP";
+    break;
+  case Command::Type::GET_OWNED:
+    output << "GET_OWNED";
+    break;
   default:
     output << "<unknown Command::Type>";
   }
@@ -195,6 +244,7 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
 }
 
 ostream &operator<<(ostream &output, const Command &c) {
+  output << c.get_type();
   c.out(output);
   return output;
 }
@@ -210,7 +260,10 @@ unique_ptr<Command> Command::unpack(ReadCursor &c) {
     return make_unique<NewCommand>(c);
   case Command::Type::GET_OWNED:
     return make_unique<GetOwnedCommand>(c);
+  case Command::Type::MAP:
+    return make_unique<MapCommand>(c);
   default:
+    cout << "ERROR: unknown command type: " << (unsigned int)type << endl;
     assert(false); // unknown type
   }
 }

@@ -5,8 +5,10 @@
 #include <limits.h>
 
 class CountDiv2 : public Rower {
-public:
+private:
   int count = 0;
+
+public:
   int col;
   CountDiv2(int col) : col(col) {}
 
@@ -15,12 +17,15 @@ public:
       count++;
     return true;
   }
+  int get_count() const { return count; }
 };
 
 class MinMaxInt : public Rower {
-public:
+private:
   int min_int = INT_MAX;
   int max_int = INT_MIN;
+
+public:
   int col;
   MinMaxInt(int col) : col(col) {}
 
@@ -31,4 +36,7 @@ public:
       max_int = r.get<int>(col);
     return true;
   }
+
+  int get_min() const { return min_int; }
+  int get_max() const { return max_int; }
 };

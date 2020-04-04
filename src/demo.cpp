@@ -6,7 +6,7 @@
 using namespace std;
 
 #ifndef NUM_ROWS
-#define NUM_ROWS (20 * 1000)
+#define NUM_ROWS (1000 * 1000)
 #endif
 
 class Demo : public Application {

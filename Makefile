@@ -109,7 +109,7 @@ docker_install: docker_clean Dockerfile
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 
 docker_clean: FORCE
-	docker ps | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker kill >/dev/null
+	docker ps | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker kill >/dev/null || echo "Nothing to delete."
 	docker ps -a | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
 
 FORCE:

@@ -16,7 +16,7 @@ class ReadCursor;
  */
 class Rower {
 public:
-  enum Type : uint8_t { SUM };
+  enum Type : uint8_t { SUM, WORD_COUNT };
   virtual ~Rower() {}
   virtual Type get_type() const { assert(false); }
 

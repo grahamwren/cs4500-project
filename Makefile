@@ -34,8 +34,11 @@ $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
-$(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
+$(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/word_count_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/bench.exe: $(SRC_DIR)/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o

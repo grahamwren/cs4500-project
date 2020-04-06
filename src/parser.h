@@ -32,6 +32,8 @@ public:
 
   bool parse_file(DataFrame &dest);
 
+  bool parse_n_lines(int, DataFrame &);
+
   bool infer_schema(Schema &scm);
 
   /**

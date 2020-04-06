@@ -29,6 +29,28 @@ bool Parser::parse_file(DataFrame &dest) {
   return accept;
 }
 
+bool Parser::parse_n_lines(int n, DataFrame &dest) {
+  checkpoint(cursor);
+
+  bool accept = false;
+  Row row(dest.get_schema());
+  int row_count = 0;
+  while (row_count < n && has_next(cursor) &&
+         parse_row(dest.get_schema(), row)) {
+    accept = true; // parsed at least one row
+    dest.add_row(row);
+    row_count++;
+  }
+  accept = accept && (empty(cursor) || row_count == n);
+
+  if (accept) {
+    commit(cursor);
+  } else {
+    rollback(cursor);
+  }
+  return accept;
+}
+
 bool Parser::infer_schema(Schema &scm) {
   checkpoint(cursor); // set checkpoint to rollback to
 

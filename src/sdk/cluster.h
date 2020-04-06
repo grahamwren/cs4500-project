@@ -6,6 +6,7 @@
 #include "kv/key.h"
 #include "network/packet.h"
 #include "network/sock.h"
+#include "parser.h"
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -209,6 +210,51 @@ public:
       success = success && dc;
     }
     return success;
+  }
+
+  bool load_file(const Key &key, const char *filename) {
+    /* if key already exists in cluster, return failure */
+    if (get_df_info(key))
+      return false;
+
+    FILE *fd = fopen(filename, "rb");
+    if (fd == 0) {
+      if (CLUSTER_LOG)
+        cout << "ERROR: failed to find file: " << filename << endl;
+      return false;
+    }
+
+    fseek(fd, 0, SEEK_END);
+    int length = ftell(fd);
+    fseek(fd, 0, SEEK_SET);
+
+    if (CLUSTER_LOG)
+      cout << "Cluster.read_file(file: " << filename << ", len: " << length
+           << ")" << endl;
+
+    char *buf = new char[length];
+    fread(buf, length, 1, fd);
+    fclose(fd);
+
+    Parser parser(length, buf);
+    Schema scm;
+    parser.infer_schema(scm);
+
+    if (CLUSTER_LOG)
+      cout << "Cluster.infer_schema(scm: " << scm << ")" << endl;
+
+    /* create DF in cluster */
+    create(key, scm);
+
+    for (int ci = 0; true; ci++) {
+      DataFrameChunk dfc(scm, ci * DF_CHUNK_SIZE);
+      bool success = parser.parse_n_lines(DF_CHUNK_SIZE, dfc);
+      if (success)
+        put(key, ci, dfc);
+      else
+        break;
+    }
+    return true;
   }
 
   bool shutdown() const {

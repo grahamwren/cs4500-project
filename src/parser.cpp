@@ -3,12 +3,12 @@
 #include "row.h"
 #include "schema.h"
 
-Parser::Parser(int len, char *d)
+Parser::Parser(long len, char *d)
     : cursor(len, reinterpret_cast<uint8_t *>(d)) {}
 Parser::Parser(const char *d) : Parser(strlen(d), const_cast<char *>(d)) {}
 
 bool Parser::out_of_input() const { return empty(cursor); }
-int Parser::parse_pos() const { return cursor.cursor - cursor.bytes; }
+long Parser::parse_pos() const { return cursor.cursor - cursor.bytes; }
 
 bool Parser::parse_file(DataFrame &dest) {
   checkpoint(cursor);

@@ -24,11 +24,11 @@ public:
   ReadCursor cursor;
   bool debug = false;
 
-  Parser(int len, char *d);
+  Parser(long len, char *d);
   Parser(const char *d);
 
   bool out_of_input() const;
-  int parse_pos() const;
+  long parse_pos() const;
 
   bool parse_file(DataFrame &dest);
 

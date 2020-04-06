@@ -18,7 +18,7 @@ public:
   uint8_t const *bytes_end = nullptr;
   std::stack<uint8_t *> *checkpoints;
 
-  ReadCursor(int len, uint8_t *b)
+  ReadCursor(long len, uint8_t *b)
       : bytes(b), cursor(b), bytes_end(b + len),
         checkpoints(new std::stack<uint8_t *>()) {}
   ReadCursor(const sized_ptr<uint8_t> data) : ReadCursor(data.len, data.ptr) {}
@@ -28,7 +28,7 @@ public:
     c.checkpoints = nullptr;
   }
   ~ReadCursor() { delete checkpoints; }
-  int length() const { return bytes_end - bytes; }
+  long length() const { return bytes_end - bytes; }
 };
 
 template <typename T> inline T yield(ReadCursor &c) {

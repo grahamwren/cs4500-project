@@ -1,0 +1,10 @@
+FROM alpine:edge
+
+RUN apk upgrade --update-cache --available
+RUN apk add make clang g++
+
+ADD . /eau2
+WORKDIR /eau2
+RUN make -B build/kv_node.exe DEBUG=false
+ENTRYPOINT ["./build/kv_node.exe"]
+CMD ["--ip", "127.0.0.1"]

@@ -193,6 +193,21 @@ public:
     }
   }
 
+  /**
+   * removes the dataframe from the cluster by key
+   */
+  bool remove(const Key &key) {
+    dataframes.erase(key);
+
+    bool success = true;
+    DeleteCommand cmd(key);
+    for (const IpV4Addr &node : nodes) {
+      optional<DataChunk> dc = send_cmd(node, cmd);
+      success = success && dc;
+    }
+    return success;
+  }
+
   bool create(const Key &key, const Schema &schema) {
     /* return failure if DF already exists for this Key */
     if (get_df_info(key))
@@ -217,7 +232,7 @@ public:
     if (get_df_info(key))
       return false;
 
-    FILE *fd = fopen(filename, "rb");
+    FILE *fd = fopen(filename, "r");
     if (fd == 0) {
       if (CLUSTER_LOG)
         cout << "ERROR: failed to find file: " << filename << endl;
@@ -225,7 +240,7 @@ public:
     }
 
     fseek(fd, 0, SEEK_END);
-    int length = ftell(fd);
+    long length = ftell(fd);
     fseek(fd, 0, SEEK_SET);
 
     if (CLUSTER_LOG)
@@ -249,11 +264,25 @@ public:
     for (int ci = 0; true; ci++) {
       DataFrameChunk dfc(scm, ci * DF_CHUNK_SIZE);
       bool success = parser.parse_n_lines(DF_CHUNK_SIZE, dfc);
+      if (ci % 1000 == 0)
+        cout << "parsed chunk: " << ci << endl;
       if (success)
         put(key, ci, dfc);
-      else
+
+      for (int i = 0; i < scm.width(); i++) {
+        if (scm.col_type(i) == Data::Type::STRING) {
+          for (int y = 0; y < dfc.nrows(); y++) {
+            if (!dfc.is_missing(dfc.get_start() + y, i)) {
+              delete dfc.get_string(dfc.get_start() + y, i);
+            }
+          }
+        }
+      }
+      if (!success || !dfc.is_full())
         break;
     }
+
+    delete[] buf;
     return true;
   }
 
@@ -285,5 +314,11 @@ public:
     if (it == dataframes.end())
       return nullopt;
     return it->second;
+  }
+
+  void get_keys(vector<Key> &dest) const {
+    for (auto &e : dataframes) {
+      dest.push_back(e.first);
+    }
   }
 };

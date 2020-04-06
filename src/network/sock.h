@@ -76,7 +76,8 @@ public:
     /* connect socket */
     int cres = ::connect(sock_fd, (struct sockaddr *)&address, sizeof(address));
     if (cres < 0) {
-      cout << "ERROR: failed to connect " << (int)errno << endl;
+      cout << "ERROR: failed to connect " << (int)errno << " to " << addr
+           << endl;
     }
     return cres;
   }

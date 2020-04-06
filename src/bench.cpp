@@ -7,11 +7,11 @@ using namespace std;
 
 int main(int argc, char **argv) {
   const char *filename = argc > 1 ? argv[1] : "datafile.sor";
-  FILE *fd = fopen(filename, "rb");
+  FILE *fd = fopen(filename, "r");
   cout << "opened file " << fd << " name: " << filename << endl;
   if (fd != 0) {
     fseek(fd, 0, SEEK_END);
-    int length = ftell(fd);
+    long length = ftell(fd);
     fseek(fd, 0, SEEK_SET);
 
     char *buf = new char[length];

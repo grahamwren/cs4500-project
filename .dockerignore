@@ -40,6 +40,7 @@ massif.out.*
 !**/build/.keep
 
 bench_files
+datasets
 
 # direnv
 .envrc

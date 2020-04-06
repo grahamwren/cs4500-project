@@ -3,8 +3,8 @@
 #include "key.h"
 #include "partial_dataframe.h"
 #include "schema.h"
-#include <unordered_map>
 #include <functional>
+#include <unordered_map>
 
 using namespace std;
 
@@ -13,6 +13,7 @@ public:
   bool has_pdf(const Key &key) const;
   PartialDataFrame &get_pdf(const Key &key);
   PartialDataFrame &add_pdf(const Key &key, const Schema &schema);
+  void remove_pdf(const Key &key);
   void
       for_each(function<void(const pair<const Key, PartialDataFrame> &)>) const;
 
@@ -34,6 +35,8 @@ PartialDataFrame &KVStore::add_pdf(const Key &key, const Schema &schema) {
   data.emplace(key, schema);
   return get_pdf(key);
 }
+
+void KVStore::remove_pdf(const Key &key) { data.erase(key); }
 
 void KVStore::for_each(
     function<void(const pair<const Key, PartialDataFrame> &)> fn) const {

@@ -34,7 +34,13 @@ $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
+$(BUILD_DIR)/linus_demo.exe: $(SRC_DIR)/linus_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
 $(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/word_count_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/dump_cluster_state.exe: $(SRC_DIR)/utils/dump_cluster_state.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
@@ -81,19 +87,19 @@ endef
 
 docker_net_valgrind: DEBUG=true
 docker_net_valgrind: docker_install
-	$(call docker_run, make clean $(BUILD_DIR)/demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
+	$(call docker_run, make clean $(BUILD_DIR)/word_count_demo.exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
-	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/demo.exe --ip 172.168.0.2)
+	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/word_count_demo.exe --ip 172.168.0.2)
 
 run_network: DEBUG=false
 run_network: APP=demo
 run_network: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe DEBUG="$(DEBUG)")
 	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.2, 172.168.0.2)
-	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
-	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
-	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
-	$(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
+	# $(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.3  --server-ip 172.168.0.2, 172.168.0.3)
+	# $(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.4  --server-ip 172.168.0.2, 172.168.0.4)
+	# $(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.5  --server-ip 172.168.0.2, 172.168.0.5)
+	# $(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.2)
 
 run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -DCLUSTER_LOG=false
@@ -112,7 +118,23 @@ docker_install: docker_clean Dockerfile
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 
 docker_clean: FORCE
-	docker ps | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker kill >/dev/null || echo "Nothing to delete."
-	docker ps -a | grep "$(CONT_NAME)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
+	docker ps | grep "$(CONT_NAME)\|kv_node" | awk '{ print $$1 }' | xargs docker kill >/dev/null || echo "Nothing to delete."
+	docker ps -a | grep "$(CONT_NAME)\|kv_node" | awk '{ print $$1 }' | xargs docker rm >/dev/null
+
+launch_cluster: docker_clean
+	docker build -f Dockerfile.kv -t kv_node:0.1 .
+	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
+	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.3 kv_node:0.1 --ip 172.168.0.3 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.4 kv_node:0.1 --ip 172.168.0.4 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.5 kv_node:0.1 --ip 172.168.0.5 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.6 kv_node:0.1 --ip 172.168.0.6 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.7 kv_node:0.1 --ip 172.168.0.7 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.8 kv_node:0.1 --ip 172.168.0.8 --server-ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.9 kv_node:0.1 --ip 172.168.0.9 --server-ip 172.168.0.2
+
+run_app:
+	docker build -f Dockerfile.$(APP) -t $(APP):0.1 .
+	docker run --network clients-project -v `pwd`/datasets:/datasets $(APP):0.1 --ip 172.168.0.2
 
 FORCE:

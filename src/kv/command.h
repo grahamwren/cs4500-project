@@ -15,7 +15,7 @@ using namespace std;
 
 class Command {
 public:
-  enum Type : uint8_t { GET, PUT, NEW, GET_DF_INFO, MAP };
+  enum Type : uint8_t { GET, PUT, NEW, GET_DF_INFO, MAP, DELETE };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
   virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) const = 0;
@@ -111,6 +111,40 @@ public:
       const PutCommand &other = dynamic_cast<const PutCommand &>(o);
       return chunk_key == other.chunk_key &&
              (data && other.data ? *data == *other.data : data == other.data);
+    }
+    return false;
+  }
+};
+
+class DeleteCommand : public Command {
+private:
+  Key key;
+
+public:
+  DeleteCommand(const Key &key) : key(key) {}
+  DeleteCommand(ReadCursor &c) : key(yield<Key>(c)) {}
+
+  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+    kv.remove_pdf(key);
+    return true;
+  }
+
+  Type get_type() const { return Type::DELETE; }
+
+  void serialize(WriteCursor &wc) const {
+    pack(wc, get_type());
+    pack<const Key &>(wc, key);
+  }
+
+  ostream &out(ostream &output) const {
+    output << "key: " << key;
+    return output;
+  }
+
+  bool equals(const Command &o) const {
+    if (get_type() == o.get_type()) {
+      const DeleteCommand &other = dynamic_cast<const DeleteCommand &>(o);
+      return key == other.key;
     }
     return false;
   }
@@ -284,6 +318,9 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
   case Command::Type::NEW:
     output << "NEW";
     break;
+  case Command::Type::DELETE:
+    output << "DELETE";
+    break;
   case Command::Type::MAP:
     output << "MAP";
     break;
@@ -312,6 +349,8 @@ unique_ptr<Command> Command::unpack(ReadCursor &c) {
     return make_unique<PutCommand>(c);
   case Command::Type::NEW:
     return make_unique<NewCommand>(c);
+  case Command::Type::DELETE:
+    return make_unique<DeleteCommand>(c);
   case Command::Type::GET_DF_INFO:
     return make_unique<GetDFInfoCommand>(c);
   case Command::Type::MAP:

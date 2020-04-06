@@ -8,5 +8,4 @@ protected:
 
 public:
   Application(const IpV4Addr &ip) : cluster(ip) {}
-  ~Application() { cluster.shutdown(); }
 };

@@ -26,7 +26,7 @@ public:
     int chunk_i = 0;
     int row_i = 0;
     while (row_i < NUM_ROWS) {
-      DataFrameChunk dfc(df_info.get_schema(), row_i);
+      DataFrameChunk dfc(df_info.get_schema());
       while (!dfc.is_full() && row_i < NUM_ROWS) {
         row.set(0, row_i);
         row.set(1, new string("apples"));
@@ -45,7 +45,7 @@ public:
       optional<DataFrameChunk> dfc = cluster.get(data_key, ci);
       if (dfc) {
         for (int i = 0; i < dfc->nrows(); i++) {
-          int row_i = dfc->get_start() + i;
+	  int row_i = DF_CHUNK_SIZE * ci + i;
           if (dfc->get_int(row_i, 0) != row_i) {
             cout << "Chunk(" << ci << ") failed" << endl;
             cout << "expected: " << row_i << " was: " << dfc->get_int(row_i, 0)

@@ -40,7 +40,7 @@ public:
     if (kv.has_pdf(ckey.key)) {
       PartialDataFrame &pdf = kv.get_pdf(ckey.key);
       if (pdf.has_chunk(ckey.chunk_idx)) {
-        const DataFrameChunk &dfc = pdf.get_chunk_by_chunk_idx(ckey.chunk_idx);
+        const DataFrameChunk &dfc = pdf.get_chunk(ckey.chunk_idx);
         dfc.serialize(dest);
         return true;
       }

@@ -103,6 +103,97 @@ public:
   const unordered_map<string, int> &get_results() const { return results; }
 };
 
+/**
+ * rower for searching and returning distinct int column values
+ */
+class SearchIntIntRower : public Rower {
+private:
+  /* arguments */
+  set<int> result_cols;
+  set<int> search_cols;
+  set<int> terms;
+
+  bool has_term(int cand) const { return terms.find(cand) != terms.end(); }
+
+  set<int> results; // results
+
+public:
+  SearchIntIntRower(const set<int> &result_cols, const set<int> &search_cols,
+                    const set<int> &terms)
+      : result_cols(result_cols), search_cols(search_cols), terms(terms) {}
+  SearchIntIntRower(ReadCursor &c) {
+    int sclen = yield<int>(c);
+    for (int i = 0; i < sclen; i++)
+      search_cols.emplace(yield<int>(c));
+
+    int tlen = yield<int>(c);
+    for (int i = 0; i < tlen; i++)
+      terms.emplace(yield<int>(c));
+
+    int rclen = yield<int>(c);
+    for (int i = 0; i < rclen; i++)
+      result_cols.emplace(yield<int>(c));
+  }
+  Type get_type() const { return Type::SEARCH_INT_INT; }
+
+  bool accept(const Row &row) {
+    for (int scol : search_cols) {
+      int val = row.get<int>(scol);
+      if (has_term(val)) {
+        for (int rcol : result_cols) {
+          results.emplace(row.get<int>(rcol));
+        }
+
+        /* once a search col has found a val,
+         * skip the rest of the search_cols */
+        break;
+      }
+    }
+    return true;
+  }
+
+  void join(const Rower &o) {
+    const SearchIntIntRower &other = dynamic_cast<const SearchIntIntRower &>(o);
+    for (int r : other.results) {
+      results.emplace(r);
+    }
+  }
+
+  void serialize(WriteCursor &c) const {
+    pack(c, get_type());
+    pack<int>(c, search_cols.size());
+    for (int scol : search_cols)
+      pack(c, scol);
+
+    pack<int>(c, terms.size());
+    for (int term : terms)
+      pack(c, term);
+
+    pack<int>(c, result_cols.size());
+    for (int rcol : result_cols)
+      pack(c, rcol);
+  }
+
+  void serialize_results(WriteCursor &c) const {
+    for (int r : results) {
+      pack(c, r);
+    }
+  }
+
+  void join_serialized(ReadCursor &c) {
+    while (has_next(c)) {
+      results.emplace(yield<int>(c));
+    }
+  }
+
+  void out(ostream &output) const {
+    output << "search_cols: " << search_cols.size()
+           << ", terms: " << terms.size() << ", results: " << results.size();
+  }
+
+  set<int> &get_results() { return results; }
+};
+
 inline unique_ptr<Rower> unpack_rower(ReadCursor &c) {
   Rower::Type type = yield<Rower::Type>(c);
   switch (type) {
@@ -110,6 +201,8 @@ inline unique_ptr<Rower> unpack_rower(ReadCursor &c) {
     return make_unique<SumRower>(c);
   case Rower::Type::WORD_COUNT:
     return make_unique<WordCountRower>(c);
+  case Rower::Type::SEARCH_INT_INT:
+    return make_unique<SearchIntIntRower>(c);
   default:
     assert(false); // unsupported Rower::Type
   }

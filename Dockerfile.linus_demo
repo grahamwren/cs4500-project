@@ -3,8 +3,10 @@ FROM alpine:edge
 RUN apk upgrade --update-cache --available
 RUN apk add make clang g++
 
+ARG debug
+
 ADD . /eau2
 WORKDIR /eau2
-RUN make -B build/linus_demo.exe CCOPTS="-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -DCLUSTER_LOG=false -pthread"
+RUN make -B build/linus_demo.exe DEBUG=${debug:-false}
 ENTRYPOINT ["./build/linus_demo.exe"]
 CMD ["--ip", "127.0.0.1"]

@@ -1,13 +1,21 @@
 DEBUG=true
 CC=clang++
-FAST_CCOPTS=-Ofast --std=c++17 -Wno-varargs -Wno-sign-compare -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -DCLUSTER_LOG=false -pthread
-DEBUG_CCOPTS=-O0 -g --std=c++17 -Wno-varargs -Wno-sign-compare -Wall -DKV_LOG=true -DNODE_LOG=true -DSOCK_LOG=true -DCLUSTER_LOG=true -pthread
 
 ifeq ($(DEBUG),true)
-	CCOPTS=$(DEBUG_CCOPTS)
+	KV_LOG ?= true
+	NODE_LOG ?= true
+	SOCK_LOG ?= true
+	CLUSTER_LOG ?= true
+	CCOPTS=-O0 -g -Wno-varargs -Wno-sign-compare -Wall
 else
-	CCOPTS=$(FAST_CCOPTS)
+	KV_LOG ?= false
+	NODE_LOG ?= false
+	SOCK_LOG ?= false
+	CLUSTER_LOG ?= false
+	CCOPTS=-Ofast -Wno-varargs -Wno-sign-compare
 endif
+
+CCOPTS += --std=c++17 -pthread -DKV_LOG=$(KV_LOG) -DNODE_LOG=$(NODE_LOG) -DSOCK_LOG=$(SOCK_LOG) -DCLUSTER_LOG=$(CLUSTER_LOG)
 
 CPATH=src
 
@@ -19,7 +27,8 @@ run: run_network
 
 build: $(BUILD_DIR)/demo.exe
 
-valgrind: CCOPTS=$(DEBUG_CCOPTS) -DNUM_ROWS=10000 -DDF_CHUNK_SIZE=4096
+valgrind: DEBUG=true
+valgrind: CCOPTS += -DNUM_ROWS=10000 -DDF_CHUNK_SIZE=4096
 valgrind: docker_net_valgrind
 
 test: FORCE
@@ -53,7 +62,7 @@ $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) -c $< -o $@
 
 
-bench: CCOPTS=$(FAST_CCOPTS)
+bench: DEBUG=false
 bench: clean $(BUILD_DIR)/bench.exe
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_0.sor
 	./$(BUILD_DIR)/bench.exe bench_files/big_file_1.sor
@@ -102,7 +111,11 @@ run_network: docker_install
 	# $(call docker_net_start, ./$(BUILD_DIR)/kv_node.exe --ip 172.168.0.6  --server-ip 172.168.0.2, 172.168.0.6)
 	$(call docker_net_run, ./$(BUILD_DIR)/$(APP).exe --ip 172.168.0.2)
 
-run_perf: CCOPTS=$(DEBUG_CCOPTS) -DKV_LOG=false -DNODE_LOG=false -DSOCK_LOG=false -DCLUSTER_LOG=false
+run_perf: KV_LOG=false
+run_perf: NODE_LOG=false
+run_perf: SOCK_LOG=false
+run_perf: CLUSTER_LOG=false
+run_perf: DEBUG=true
 run_perf: APP=demo
 run_perf: docker_install
 	$(call docker_run, make clean $(BUILD_DIR)/$(APP).exe $(BUILD_DIR)/kv_node.exe CCOPTS="$(CCOPTS)")
@@ -121,11 +134,15 @@ docker_clean: FORCE
 	docker ps | grep "$(CONT_NAME)\|kv_node" | awk '{ print $$1 }' | xargs docker kill >/dev/null || echo "Nothing to delete."
 	docker ps -a | grep "$(CONT_NAME)\|kv_node" | awk '{ print $$1 }' | xargs docker rm >/dev/null
 
-launch_cluster: docker_clean
-	docker build -f Dockerfile.kv -t kv_node:0.1 .
+launch_one_node: docker_clean
+	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t kv_node:0.1 .
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
-	docker run -d --network clients-project --ip 172.168.0.3 kv_node:0.1 --ip 172.168.0.3 --server-ip 172.168.0.2
+
+launch_cluster: docker_clean
+	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t kv_node:0.1 .
+	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
+	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.4 kv_node:0.1 --ip 172.168.0.4 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.5 kv_node:0.1 --ip 172.168.0.5 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.6 kv_node:0.1 --ip 172.168.0.6 --server-ip 172.168.0.2
@@ -133,8 +150,9 @@ launch_cluster: docker_clean
 	docker run -d --network clients-project --ip 172.168.0.8 kv_node:0.1 --ip 172.168.0.8 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.9 kv_node:0.1 --ip 172.168.0.9 --server-ip 172.168.0.2
 
+
 run_app:
-	docker build -f Dockerfile.$(APP) -t $(APP):0.1 .
+	docker build --build-arg debug=$(DEBUG) -f Dockerfile.$(APP) -t $(APP):0.1 .
 	docker run --network clients-project -v `pwd`/datasets:/datasets $(APP):0.1 --ip 172.168.0.2
 
 FORCE:

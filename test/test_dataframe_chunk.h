@@ -10,7 +10,7 @@ public:
 
   void SetUp() {
     scm = new Schema("ISFB");
-    df = new DataFrameChunk(*scm, 0);
+    df = new DataFrameChunk(*scm);
     row = new Row(*scm);
   }
 
@@ -58,35 +58,6 @@ TEST_F(TestDataFrameChunk, test__add_row__get__nrows) {
 
   /* ensure length still correct */
   EXPECT_EQ(df->nrows(), 1000);
-}
-
-TEST_F(TestDataFrameChunk, test_map) {
-  /* fill df with 100 rows */
-  Row r(df->get_schema());
-  char buf[1024];
-  for (int i = 0; i < 100; i++) {
-    r.set(0, i);
-    sprintf(buf, "hello %d", i);
-    r.set(1, new string(buf));
-    r.set(2, i * 3.3f);
-    r.set(3, i % 3 == 0);
-    df->add_row(r);
-  }
-
-  class CountDiv2 : public Rower {
-  public:
-    int count = 0;
-
-    bool accept(const Row &r) {
-      if (r.get<int>(0) % 2 == 0)
-        count++;
-      return true;
-    }
-  };
-
-  CountDiv2 rower;
-  df->map(rower);
-  EXPECT_EQ(rower.count, 50);
 }
 
 TEST_F(TestDataFrameChunk, test_equals) {

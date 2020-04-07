@@ -7,7 +7,7 @@ TEST(TestPartialDataFrame, test_add_df_chunk__get) {
   Schema schema("IFB");
   PartialDataFrame pdf(schema);
 
-  DataFrameChunk dfc(schema, 0);
+  DataFrameChunk dfc(schema);
   Row row(schema);
   for (int i = 0; i < DF_CHUNK_SIZE; i++) {
     row.set(0, i);
@@ -21,7 +21,7 @@ TEST(TestPartialDataFrame, test_add_df_chunk__get) {
   ReadCursor rc = wc;
   pdf.add_df_chunk(0, rc);
 
-  DataFrameChunk dfc2(schema, DF_CHUNK_SIZE);
+  DataFrameChunk dfc2(schema);
   for (int i = DF_CHUNK_SIZE; i < DF_CHUNK_SIZE * 1.5; i++) {
     row.set(0, i);
     row.set(1, i * 0.5f);
@@ -45,7 +45,7 @@ TEST(TestPartialDataFrame, test_add_df_chunk__map) {
   Schema schema("IFB");
   PartialDataFrame pdf(schema);
 
-  DataFrameChunk dfc(schema, 0);
+  DataFrameChunk dfc(schema);
   Row row(schema);
   for (int i = 0; i < 1000; i++) {
     row.set(0, i);          // 4 bytes
@@ -77,7 +77,7 @@ TEST(TestPartialDataFrame, test_map_non_contiguous) {
   Row row(schema);
   /* add two chunks worth of rows */
   for (int ci = 0; ci < 2; ci++) {
-    DataFrameChunk dfc(schema, DF_CHUNK_SIZE * ci);
+    DataFrameChunk dfc(schema);
     for (int i = 0; i < DF_CHUNK_SIZE; i++) {
       row.set(0, i);
       row.set(1, i * 0.99999999999f);
@@ -92,7 +92,7 @@ TEST(TestPartialDataFrame, test_map_non_contiguous) {
 
   /* skip chunk: 3 */
 
-  DataFrameChunk dfc(schema, DF_CHUNK_SIZE * 4);
+  DataFrameChunk dfc(schema);
   for (int i = DF_CHUNK_SIZE * 4; i < DF_CHUNK_SIZE * 5; i++) {
     row.set(0, i);          // 4 bytes
     row.set(1, i * 0.5f);   // 4 bytes

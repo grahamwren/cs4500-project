@@ -22,38 +22,44 @@ public:
     return has_chunk(chunk_idx);
   }
 
-  const DataFrameChunk &get_chunk_by_row(int y) const {
-    int chunk_idx = y / DF_CHUNK_SIZE;
-    return get_chunk_by_chunk_idx(chunk_idx);
-  }
-
   int get_int(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk_by_row(y);
-    return chunk.get_int(y, x);
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    int chunk_offset = y % DF_CHUNK_SIZE;
+    return get_chunk(chunk_idx).get_int(chunk_offset, x);
   }
   float get_float(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk_by_row(y);
-    return chunk.get_float(y, x);
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    int chunk_offset = y % DF_CHUNK_SIZE;
+    return get_chunk(chunk_idx).get_float(chunk_offset, x);
   }
   bool get_bool(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk_by_row(y);
-    return chunk.get_bool(y, x);
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    int chunk_offset = y % DF_CHUNK_SIZE;
+    return get_chunk(chunk_idx).get_bool(chunk_offset, x);
   }
   string *get_string(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk_by_row(y);
-    return chunk.get_string(y, x);
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    int chunk_offset = y % DF_CHUNK_SIZE;
+    return get_chunk(chunk_idx).get_string(chunk_offset, x);
   }
   bool is_missing(int y, int x) const {
-    const DataFrameChunk &chunk = get_chunk_by_row(y);
-    return chunk.is_missing(y, x);
+    int chunk_idx = y / DF_CHUNK_SIZE;
+    int chunk_offset = y % DF_CHUNK_SIZE;
+    return get_chunk(chunk_idx).is_missing(chunk_offset, x);
   }
 
   /**
    * Runs the given rower over the Chunks available in this PartialDataFrame
    */
   void map(Rower &rower) const {
+    Row row(get_schema());
     for (auto &e : chunks) {
-      e.second.map(rower);
+      auto &chunk = e.second;
+      int start_i = e.first * DF_CHUNK_SIZE;
+      for (int i = start_i; i < start_i + chunk.nrows(); i++) {
+        fill_row(i, row);
+        rower.accept(row);
+      }
     }
   }
 
@@ -63,7 +69,8 @@ public:
    */
   void add_df_chunk(int chunk_idx, ReadCursor &c) {
     assert(!has_chunk(chunk_idx));
-    chunks.emplace(chunk_idx, DataFrameChunk(schema, c));
+    auto &dfc = chunks.emplace(chunk_idx, schema).first->second;
+    dfc.fill(c);
   }
 
   /**
@@ -80,7 +87,7 @@ public:
     return chunks.find(chunk_idx) != chunks.end();
   }
 
-  const DataFrameChunk &get_chunk_by_chunk_idx(int chunk_idx) const {
+  const DataFrameChunk &get_chunk(int chunk_idx) const {
     assert(has_chunk(chunk_idx));
     return chunks.find(chunk_idx)->second;
   }

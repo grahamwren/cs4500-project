@@ -3,8 +3,10 @@ FROM alpine:edge
 RUN apk upgrade --update-cache --available
 RUN apk add make clang g++
 
+ARG debug
+
 ADD . /eau2
 WORKDIR /eau2
-RUN make -B build/dump_cluster_state.exe DEBUG=false
+RUN make -B build/dump_cluster_state.exe DEBUG=${debug:-false}
 ENTRYPOINT ["./build/dump_cluster_state.exe"]
 CMD ["--ip", "127.0.0.1"]

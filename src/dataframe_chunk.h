@@ -16,12 +16,10 @@ using namespace std;
 class DataFrameChunk : public DataFrame {
 private:
   const Schema &schema;
-  int start_idx;
   vector<unique_ptr<Column>> columns;
 
 public:
-  DataFrameChunk(const Schema &scm, int start_i)
-      : schema(scm), start_idx(start_i) {
+  DataFrameChunk(const Schema &scm) : schema(scm) {
     assert(schema.width());
     columns.reserve(schema.width());
     for (int i = 0; i < schema.width(); i++) {
@@ -29,25 +27,36 @@ public:
     }
   }
 
-  DataFrameChunk(const Schema &scm, ReadCursor &rc)
-      : DataFrameChunk(scm, yield<int>(rc)) {
-    int len = yield<int>(rc);
+  DataFrameChunk(const Schema &scm, ReadCursor &c) : DataFrameChunk(scm) {
+    fill(c);
+  }
+
+  void fill(ReadCursor &c) {
+    int len = yield<int>(c);
     /* fill each column from left to right */
     for (int i = 0; i < schema.width(); i++) {
-      columns[i]->fill(len, rc);
+      columns[i]->fill(len, c);
     }
   }
 
   DataFrameChunk(DataFrameChunk &&) noexcept = default;
   DataFrameChunk(const DataFrameChunk &) = delete;
 
+  ~DataFrameChunk() {
+    for (int i = 0; i < get_schema().width(); i++) {
+      if (get_schema().col_type(i) == Data::Type::STRING) {
+        for (int y = 0; y < nrows(); y++) {
+          if (!is_missing(y, i)) {
+            delete get_string(y, i);
+          }
+        }
+      }
+    }
+  }
+
   const Schema &get_schema() const { return schema; }
 
-  int get_start() const { return start_idx; }
-  int chunk_idx() const { return get_start() / DF_CHUNK_SIZE; }
-
   void serialize(WriteCursor &wc) const {
-    pack(wc, get_start());
     int len = nrows();
     pack(wc, len);
     for (int i = 0; i < schema.width(); i++) {
@@ -57,57 +66,57 @@ public:
   }
 
   int get_int(int y, int x) const {
-    assert(y >= get_start());          // assert within this chunk
-    assert(y < nrows() + get_start()); // assert within this chunk
+    assert(y >= 0);      // assert within this chunk
+    assert(y < nrows()); // assert within this chunk
     assert(x >= 0);
     assert(x < ncols());
 
     const unique_ptr<Column> &col = columns[x];
-    assert(!col->is_missing(y - get_start()));
-    return col->get_int(y - get_start());
+    assert(!col->is_missing(y));
+    return col->get_int(y);
   }
 
   float get_float(int y, int x) const {
-    assert(y >= get_start());          // assert within this chunk
-    assert(y < nrows() + get_start()); // assert within this chunk
+    assert(y >= 0);      // assert within this chunk
+    assert(y < nrows()); // assert within this chunk
     assert(x >= 0);
     assert(x < ncols());
 
     const unique_ptr<Column> &col = columns[x];
-    assert(!col->is_missing(y - get_start()));
-    return col->get_float(y - get_start());
+    assert(!col->is_missing(y));
+    return col->get_float(y);
   }
 
   bool get_bool(int y, int x) const {
-    assert(y >= get_start());          // assert within this chunk
-    assert(y < nrows() + get_start()); // assert within this chunk
+    assert(y >= 0);      // assert within this chunk
+    assert(y < nrows()); // assert within this chunk
     assert(x >= 0);
     assert(x < ncols());
 
     const unique_ptr<Column> &col = columns[x];
-    assert(!col->is_missing(y - get_start()));
-    return col->get_bool(y - get_start());
+    assert(!col->is_missing(y));
+    return col->get_bool(y);
   }
 
   string *get_string(int y, int x) const {
-    assert(y >= get_start());          // assert within this chunk
-    assert(y < nrows() + get_start()); // assert within this chunk
+    assert(y >= 0);      // assert within this chunk
+    assert(y < nrows()); // assert within this chunk
     assert(x >= 0);
     assert(x < ncols());
 
     const unique_ptr<Column> &col = columns[x];
-    assert(!col->is_missing(y - get_start()));
-    return col->get_string(y - get_start());
+    assert(!col->is_missing(y));
+    return col->get_string(y);
   }
 
   bool is_missing(int y, int x) const {
-    assert(y >= get_start());          // assert within this chunk
-    assert(y < nrows() + get_start()); // assert within this chunk
+    assert(y >= 0);      // assert within this chunk
+    assert(y < nrows()); // assert within this chunk
     assert(x >= 0);
     assert(x < ncols());
 
     const unique_ptr<Column> &col = columns[x];
-    return col->is_missing(y - get_start());
+    return col->is_missing(y);
   }
 
   bool is_full() const { return columns[0]->length() >= DF_CHUNK_SIZE; }
@@ -141,24 +150,11 @@ public:
 
   int nrows() const { return columns[0]->length(); }
 
-  void map(Rower &rower) const {
-    Row row(get_schema());
-    for (int i = get_start(); i < get_start() + nrows(); i++) {
-      fill_row(i, row);
-      rower.accept(row);
-    }
-  }
-
   bool operator==(const DataFrameChunk &other) const {
-    return start_idx == other.start_idx && nrows() == other.nrows() &&
-           get_schema() == other.get_schema() &&
+    return nrows() == other.nrows() && get_schema() == other.get_schema() &&
            equal(columns.begin(), columns.end(), other.columns.begin(),
                  [](const unique_ptr<Column> &l, const unique_ptr<Column> &r) {
                    return l->equals(*r);
                  });
-  }
-
-  bool operator<(const DataFrameChunk &other) const {
-    return start_idx < other.start_idx;
   }
 };

@@ -262,22 +262,13 @@ public:
     create(key, scm);
 
     for (int ci = 0; true; ci++) {
-      DataFrameChunk dfc(scm, ci * DF_CHUNK_SIZE);
+      DataFrameChunk dfc(scm);
       bool success = parser.parse_n_lines(DF_CHUNK_SIZE, dfc);
-      if (ci % 1000 == 0)
-        cout << "parsed chunk: " << ci << endl;
+
       if (success)
         put(key, ci, dfc);
 
-      for (int i = 0; i < scm.width(); i++) {
-        if (scm.col_type(i) == Data::Type::STRING) {
-          for (int y = 0; y < dfc.nrows(); y++) {
-            if (!dfc.is_missing(dfc.get_start() + y, i)) {
-              delete dfc.get_string(dfc.get_start() + y, i);
-            }
-          }
-        }
-      }
+      /* if parse failed, or didn't fill chunk */
       if (!success || !dfc.is_full())
         break;
     }

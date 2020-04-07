@@ -74,7 +74,7 @@ public:
       PartialDataFrame &pdf = kv->add_pdf(key, scm);
 
       /* create chunk at 0 */
-      DataFrameChunk dfc(scm, 0);
+      DataFrameChunk dfc(scm);
       Row row(scm);
       for (int i = 0; i < 100; i++) {
         row.set(0, i);
@@ -100,7 +100,7 @@ public:
       PartialDataFrame &pdf = kv->add_pdf(key, scm);
 
       /* create chunk at chunk_idx */
-      DataFrameChunk dfc(scm, chunk_idx * DF_CHUNK_SIZE);
+      DataFrameChunk dfc(scm);
       Row row(scm);
       for (int i = 0; i < 100; i++) {
         row.set(0, i);
@@ -127,7 +127,7 @@ TEST_F(TestCommandRun, test_put) {
   const Schema &scm = pdf.get_schema();
 
   /* create chunk at chunk_idx */
-  DataFrameChunk dfc(scm, chunk_idx * DF_CHUNK_SIZE);
+  DataFrameChunk dfc(scm);
   Row row(scm);
   for (int i = 0; i < 100; i++) {
     row.set(0, i);
@@ -149,7 +149,7 @@ TEST_F(TestCommandRun, test_put) {
   /* expect chunk to have been added to PDF */
   EXPECT_TRUE(pdf.has_chunk(chunk_idx));
   /* expect chunk to be the one we added */
-  EXPECT_TRUE(pdf.get_chunk_by_chunk_idx(chunk_idx) == dfc);
+  EXPECT_TRUE(pdf.get_chunk(chunk_idx) == dfc);
 }
 
 TEST_F(TestCommandRun, test_get) {
@@ -160,7 +160,7 @@ TEST_F(TestCommandRun, test_get) {
   EXPECT_TRUE(cmd.run(*kv, 0, dest));
   ReadCursor rc(dest.length(), dest.bytes());
   DataFrameChunk dfc(kv->get_pdf(key).get_schema(), rc);
-  EXPECT_TRUE(dfc == kv->get_pdf(key).get_chunk_by_chunk_idx(1));
+  EXPECT_TRUE(dfc == kv->get_pdf(key).get_chunk(1));
 
   /* chunk at 0 should not exist because is "not-owned" so command should return
    * false for ERR */

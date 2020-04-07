@@ -16,7 +16,7 @@ class ReadCursor;
  */
 class Rower {
 public:
-  enum Type : uint8_t { SUM, WORD_COUNT };
+  enum Type : uint8_t { SUM, WORD_COUNT, SEARCH_INT_INT };
   virtual ~Rower() {}
   virtual Type get_type() const { assert(false); }
 
@@ -56,6 +56,12 @@ inline ostream &operator<<(ostream &output, const Rower::Type type) {
   switch (type) {
   case Rower::Type::SUM:
     output << "SUM";
+    break;
+  case Rower::Type::WORD_COUNT:
+    output << "WORD_COUNT";
+    break;
+  case Rower::Type::SEARCH_INT_INT:
+    output << "SEARCH_INT_INT";
     break;
   default:
     output << "<unknown Rower::Type>";

@@ -143,6 +143,7 @@ launch_cluster: docker_clean
 	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t kv_node:0.1 .
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.3 kv_node:0.1 --ip 172.168.0.3 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.4 kv_node:0.1 --ip 172.168.0.4 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.5 kv_node:0.1 --ip 172.168.0.5 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.6 kv_node:0.1 --ip 172.168.0.6 --server-ip 172.168.0.2

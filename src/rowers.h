@@ -109,44 +109,40 @@ public:
 class SearchIntIntRower : public Rower {
 private:
   /* arguments */
-  set<int> result_cols;
-  set<int> search_cols;
+  int result_col;
+  int search_col;
   set<int> terms;
 
   bool has_term(int cand) const { return terms.find(cand) != terms.end(); }
 
-  set<int> results; // results
+  set<int> results;     // old results and new results
+  set<int> new_results; // just the new results
 
 public:
-  SearchIntIntRower(const set<int> &result_cols, const set<int> &search_cols,
-                    const set<int> &terms)
-      : result_cols(result_cols), search_cols(search_cols), terms(terms) {}
-  SearchIntIntRower(ReadCursor &c) {
-    int sclen = yield<int>(c);
-    for (int i = 0; i < sclen; i++)
-      search_cols.emplace(yield<int>(c));
-
+  SearchIntIntRower(int result_col, int search_col, const set<int> &terms,
+                    const set<int> &old_res)
+      : result_col(result_col), search_col(search_col), terms(terms),
+        results(old_res) {}
+  SearchIntIntRower(ReadCursor &c)
+      : result_col(yield<int>(c)), search_col(yield<int>(c)) {
     int tlen = yield<int>(c);
     for (int i = 0; i < tlen; i++)
       terms.emplace(yield<int>(c));
 
-    int rclen = yield<int>(c);
-    for (int i = 0; i < rclen; i++)
-      result_cols.emplace(yield<int>(c));
+    int orlen = yield<int>(c);
+    for (int i = 0; i < orlen; i++)
+      results.emplace(yield<int>(c));
   }
   Type get_type() const { return Type::SEARCH_INT_INT; }
 
   bool accept(const Row &row) {
-    for (int scol : search_cols) {
-      int val = row.get<int>(scol);
-      if (has_term(val)) {
-        for (int rcol : result_cols) {
-          results.emplace(row.get<int>(rcol));
-        }
-
-        /* once a search col has found a val,
-         * skip the rest of the search_cols */
-        break;
+    int val = row.get<int>(search_col);
+    if (has_term(val)) {
+      int cand = row.get<int>(result_col);
+      /* if a new result, append to both sets */
+      if (results.find(cand) == results.end()) {
+        results.emplace(cand);
+        new_results.emplace(cand);
       }
     }
     return true;
@@ -154,44 +150,59 @@ public:
 
   void join(const Rower &o) {
     const SearchIntIntRower &other = dynamic_cast<const SearchIntIntRower &>(o);
-    for (int r : other.results) {
-      results.emplace(r);
-    }
+    new_results.insert(other.new_results.begin(), other.new_results.end());
   }
 
   void serialize(WriteCursor &c) const {
     pack(c, get_type());
-    pack<int>(c, search_cols.size());
-    for (int scol : search_cols)
-      pack(c, scol);
+    pack<int>(c, search_col);
+    pack<int>(c, result_col);
 
     pack<int>(c, terms.size());
     for (int term : terms)
       pack(c, term);
 
-    pack<int>(c, result_cols.size());
-    for (int rcol : result_cols)
-      pack(c, rcol);
+    /* pack old-results */
+    pack<int>(c, results.size());
+    for (int res : results)
+      pack(c, res);
   }
 
   void serialize_results(WriteCursor &c) const {
-    for (int r : results) {
+    for (int r : new_results) {
       pack(c, r);
     }
   }
 
   void join_serialized(ReadCursor &c) {
     while (has_next(c)) {
-      results.emplace(yield<int>(c));
+      new_results.emplace(yield<int>(c));
     }
   }
 
   void out(ostream &output) const {
-    output << "search_cols: " << search_cols.size()
-           << ", terms: " << terms.size() << ", results: " << results.size();
+    output << "results: " << new_results.size() << ", query: SELECT "
+           << result_col << " WHERE " << search_col << " IN [";
+    auto t_it = terms.begin();
+    if (terms.size() > 0)
+      cout << *t_it++;
+    for (int i = 1; i < 20 && i < terms.size(); i++)
+      cout << "," << *t_it++;
+    if (terms.size() > 20)
+      cout << ", ... " << terms.size() - 20 << "more terms";
+    cout << "] AND " << search_col << " NOT IN [";
+
+    auto or_it = terms.begin();
+    if (results.size() > 0)
+      cout << *or_it++;
+    for (int i = 1; i < 20 && i < results.size(); i++)
+      cout << "," << *or_it++;
+    if (results.size() > 20)
+      cout << ", ... " << results.size() - 20 << "more old results";
+    cout << "]";
   }
 
-  set<int> &get_results() { return results; }
+  set<int> &get_results() { return new_results; }
 };
 
 inline unique_ptr<Rower> unpack_rower(ReadCursor &c) {

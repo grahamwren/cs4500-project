@@ -26,10 +26,11 @@ protected:
   /**
    * invoked by node
    */
-  bool handler(const IpV4Addr &src, unique_ptr<Command> cmd, WriteCursor &wc) {
+  void handler(const IpV4Addr &src, unique_ptr<Command> cmd,
+               const Node::respond_fn_t &respond) {
     if (KV_LOG)
       cout << "KV.asyncRecv(" << src << ", " << *cmd << ")" << endl;
-    return cmd->run(data_store, src, wc);
+    return cmd->run(data_store, src, respond);
   }
 
 public:
@@ -39,7 +40,7 @@ public:
   }
   void start() {
     node.set_data_handler(
-        [&](IpV4Addr src, ReadCursor &req, WriteCursor &resp) {
+        [&](IpV4Addr src, ReadCursor &req, const Node::respond_fn_t &resp) {
           return this->handler(src, Command::unpack(req), resp);
         });
     node.start();

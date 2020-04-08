@@ -3,6 +3,7 @@
 #include "chunk_key.h"
 #include "data_chunk.h"
 #include "kv_store.h"
+#include "network/node.h"
 #include "network/packet.h"
 #include "rowers.h"
 #include "schema.h"
@@ -18,7 +19,8 @@ public:
   enum Type : uint8_t { GET, PUT, NEW, GET_DF_INFO, MAP, DELETE };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
-  virtual bool run(KVStore &, const IpV4Addr &, WriteCursor &) const = 0;
+  virtual void run(KVStore &, const IpV4Addr &,
+                   const Node::respond_fn_t &) const = 0;
   virtual Type get_type() const = 0;
   virtual void serialize(WriteCursor &) const = 0;
   virtual ostream &out(ostream &) const = 0;
@@ -36,16 +38,18 @@ public:
   GetCommand(ReadCursor &c) : ckey(yield<Key>(c), yield<int>(c)) {}
   Type get_type() const { return Type::GET; }
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
     if (kv.has_pdf(ckey.key)) {
       PartialDataFrame &pdf = kv.get_pdf(ckey.key);
       if (pdf.has_chunk(ckey.chunk_idx)) {
         const DataFrameChunk &dfc = pdf.get_chunk(ckey.chunk_idx);
-        dfc.serialize(dest);
-        return true;
+        WriteCursor wc;
+        dfc.serialize(wc);
+        return respond(true, sized_ptr(wc.length(), wc.bytes()));
       }
     }
-    return false;
+    return respond(false);
   }
 
   void serialize(WriteCursor &wc) const {
@@ -81,18 +85,20 @@ public:
 
   Type get_type() const { return Type::PUT; }
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
-    if (kv.has_pdf(chunk_key.key)) {
-      PartialDataFrame &pdf = kv.get_pdf(chunk_key.key);
-      ReadCursor rc(data->len(), data->ptr());
-      if (pdf.has_chunk(chunk_key.chunk_idx)) {
-        pdf.replace_df_chunk(chunk_key.chunk_idx, rc);
-      } else {
-        pdf.add_df_chunk(chunk_key.chunk_idx, rc);
-      }
-      return true;
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
+    if (!kv.has_pdf(chunk_key.key))
+      return respond(false); // returns and responds ERR
+    else
+      respond(true); // just respond OK
+
+    PartialDataFrame &pdf = kv.get_pdf(chunk_key.key);
+    ReadCursor rc(data->len(), data->ptr());
+    if (pdf.has_chunk(chunk_key.chunk_idx)) {
+      pdf.replace_df_chunk(chunk_key.chunk_idx, rc);
+    } else {
+      pdf.add_df_chunk(chunk_key.chunk_idx, rc);
     }
-    return false;
   }
 
   void serialize(WriteCursor &wc) const {
@@ -124,9 +130,10 @@ public:
   DeleteCommand(const Key &key) : key(key) {}
   DeleteCommand(ReadCursor &c) : key(yield<Key>(c)) {}
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
     kv.remove_pdf(key);
-    return true;
+    return respond(true);
   }
 
   Type get_type() const { return Type::DELETE; }
@@ -159,12 +166,13 @@ public:
   NewCommand(const Key &key, const Schema &scm) : key(key), scm(scm) {}
   NewCommand(ReadCursor &c) : key(yield<Key>(c)), scm(yield<Schema>(c)) {}
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
     if (kv.has_pdf(key))
-      return false;
+      return respond(false);
 
     kv.add_pdf(key, scm);
-    return true;
+    return respond(true);
   }
 
   Type get_type() const { return Type::NEW; }
@@ -205,40 +213,43 @@ public:
   }
   Type get_type() const { return Type::GET_DF_INFO; }
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
     /* if command has query_key, just get info for this query_key */
     if (query_key) {
       if (kv.has_pdf(*query_key)) {
         const PartialDataFrame &pdf = kv.get_pdf(*query_key);
-        pack<const Key &>(dest, *query_key);
+        WriteCursor wc;
+        pack<const Key &>(wc, *query_key);
         if (pdf.has_chunk(0)) {
-          pack<bool>(dest, true); // pack true if this Node has chunk 0
-          pack<const Schema &>(dest, pdf.get_schema());
+          pack<bool>(wc, true); // pack true if this Node has chunk 0
+          pack<const Schema &>(wc, pdf.get_schema());
         } else {
           /* pack false because not the owner of this DF */
-          pack<bool>(dest, false);
+          pack<bool>(wc, false);
         }
-        pack<int>(dest, pdf.largest_chunk_idx());
-        return true;
+        pack<int>(wc, pdf.largest_chunk_idx());
+        return respond(true, sized_ptr(wc.length(), wc.bytes()));
       }
-      return false;
+      return respond(false);
     } else {
+      WriteCursor wc;
       /* traverse all keys checking for owned DF */
       kv.for_each([&](const pair<const Key, PartialDataFrame> &e) {
         const Key &key = e.first;
         const PartialDataFrame &pdf = e.second;
 
-        pack<const Key &>(dest, key);
+        pack<const Key &>(wc, key);
         if (pdf.has_chunk(0)) {
-          pack<bool>(dest, true); // pack true if this Node has chunk 0
-          pack<const Schema &>(dest, pdf.get_schema());
+          pack<bool>(wc, true); // pack true if this Node has chunk 0
+          pack<const Schema &>(wc, pdf.get_schema());
         } else {
           /* pack false because not the owner of this DF */
-          pack<bool>(dest, false);
+          pack<bool>(wc, false);
         }
-        pack<int>(dest, pdf.largest_chunk_idx());
+        pack<int>(wc, pdf.largest_chunk_idx());
       });
-      return true;
+      return respond(true, sized_ptr(wc.length(), wc.bytes()));
     }
   }
 
@@ -277,14 +288,16 @@ public:
   MapCommand(ReadCursor &c) : key(yield<Key>(c)), rower(unpack_rower(c)) {}
   Type get_type() const { return Type::MAP; }
 
-  bool run(KVStore &kv, const IpV4Addr &src, WriteCursor &dest) const {
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
     if (kv.has_pdf(key)) {
       PartialDataFrame &pdf = kv.get_pdf(key);
       pdf.map(*rower); // local map
-      rower->serialize_results(dest);
-      return true;
+      WriteCursor wc;
+      rower->serialize_results(wc);
+      return respond(true, sized_ptr(wc.length(), wc.bytes()));
     }
-    return false;
+    return respond(false);
   }
 
   void serialize(WriteCursor &wc) const {

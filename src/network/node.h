@@ -25,7 +25,23 @@ using namespace std;
  */
 class Node {
 public:
-  typedef function<bool(const IpV4Addr &, ReadCursor &, WriteCursor &)>
+  /* call once function to respond to socket, not thread-safe */
+  struct respond_fn_t {
+    respond_fn_t(const respond_fn_t &) = delete;
+    function<void(bool, const sized_ptr<uint8_t> &)> f;
+    mutable bool called = false;
+    void operator()(bool res) const {
+      assert(!called);
+      called = true;
+      f(res, sized_ptr<uint8_t>(0, nullptr));
+    }
+    void operator()(bool res, const sized_ptr<uint8_t> &data) const {
+      assert(!called);
+      called = true;
+      f(res, data);
+    }
+  };
+  typedef function<void(const IpV4Addr &, ReadCursor &, const respond_fn_t &)>
       handler_fn_t;
 
 protected:
@@ -138,16 +154,17 @@ protected:
 
   void handle_data_pkt(const DataSock &sock, const Packet &req) const {
     ReadCursor rc(req.data->data());
-    WriteCursor wc;
-    if (data_handler(req.hdr.src_addr, rc, wc)) {
-      Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK,
-                     sized_ptr<uint8_t>(wc.length(), wc.bytes()));
-      sock.send_pkt(ok_resp);
-    } else {
-      Packet err_resp(my_addr, req.hdr.src_addr, PacketType::ERR,
-                      sized_ptr<uint8_t>(wc.length(), wc.bytes()));
-      sock.send_pkt(err_resp);
-    }
+    respond_fn_t resp_fn = {[&](bool res, const sized_ptr<uint8_t> &data) {
+      if (res) {
+        Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK, data);
+        sock.send_pkt(ok_resp);
+      } else {
+        Packet err_resp(my_addr, req.hdr.src_addr, PacketType::ERR, data);
+        sock.send_pkt(err_resp);
+      }
+    }};
+    data_handler(req.hdr.src_addr, rc, resp_fn);
+    assert(resp_fn.called);
   }
 
   void register_with(const IpV4Addr &server_a) {
@@ -184,9 +201,8 @@ protected:
 public:
   Node(const IpV4Addr &a)
       : should_continue(true), my_addr(a), listen_s(a),
-        data_handler([](IpV4Addr src, ReadCursor &rc, WriteCursor &wc) {
-          return true;
-        }) {
+        data_handler([](const IpV4Addr &src, ReadCursor &rc,
+                        const respond_fn_t &respond) { respond(true); }) {
     peers.emplace(a);
     listen_s.listen();
   }

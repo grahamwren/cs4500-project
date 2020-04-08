@@ -63,6 +63,8 @@ class TestCommandRun : public ::testing::Test {
 public:
   char buf[BUFSIZ];
   KVStore *kv;
+  DataChunk *output = nullptr;
+  bool result = false;
 
   void SetUp() {
     kv = new KVStore;
@@ -115,7 +117,20 @@ public:
       pdf.add_df_chunk(chunk_idx, rc);
     }
   }
-  void Teardown() { delete kv; }
+  void Teardown() {
+    delete kv;
+    delete output;
+  }
+
+  Node::respond_fn_t get_respond() {
+    delete output;
+    output = nullptr;
+    result = false;
+    return Node::respond_fn_t{[&](bool res, const sized_ptr<uint8_t> &data) {
+      result = res;
+      output = new DataChunk(data);
+    }};
+  }
 };
 
 TEST_F(TestCommandRun, test_put) {
@@ -140,11 +155,11 @@ TEST_F(TestCommandRun, test_put) {
   dfc.serialize(wc);
   PutCommand cmd(ChunkKey(key, chunk_idx),
                  make_unique<DataChunk>(wc.length(), wc.bytes()));
-  WriteCursor dest;
-  /* command should return true to show success */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+  /* command run sets output and result */
+  cmd.run(*kv, 0, get_respond());
+  EXPECT_TRUE(result);
   /* successful put results in no output */
-  EXPECT_EQ(dest.length(), 0);
+  EXPECT_EQ(output->len(), 0);
 
   /* expect chunk to have been added to PDF */
   EXPECT_TRUE(pdf.has_chunk(chunk_idx));
@@ -155,30 +170,31 @@ TEST_F(TestCommandRun, test_put) {
 TEST_F(TestCommandRun, test_get) {
   Key key(string("not-owned 0"));
   GetCommand cmd(key, 1);
-  WriteCursor dest;
   /* command should return true to show success */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
-  ReadCursor rc(dest.length(), dest.bytes());
+  cmd.run(*kv, 0, get_respond());
+  EXPECT_TRUE(result);
+
+  ReadCursor rc(output->data());
   DataFrameChunk dfc(kv->get_pdf(key).get_schema(), rc);
   EXPECT_TRUE(dfc == kv->get_pdf(key).get_chunk(1));
 
-  /* chunk at 0 should not exist because is "not-owned" so command should return
-   * false for ERR */
   GetCommand err_cmd(key, 0);
-  WriteCursor dest2;
-  EXPECT_FALSE(err_cmd.run(*kv, 0, dest2));
-  EXPECT_EQ(dest2.length(), 0);
+  err_cmd.run(*kv, 0, get_respond());
+  /* chunk at 0 should not exist because is "not-owned" so command should result
+   * in false for ERR */
+  EXPECT_FALSE(result);
+  EXPECT_EQ(output->len(), 0);
 }
 
 TEST_F(TestCommandRun, test_new) {
   Key new_key(string("new df"));
   Schema scm("IIII");
   NewCommand cmd(new_key, scm);
-  WriteCursor dest;
-  /* command should return true to show success, new command should have no
+  cmd.run(*kv, 0, get_respond());
+  /* command should result in true to show success, new command should have no
    * output */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
-  EXPECT_EQ(dest.length(), 0);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(output->len(), 0);
 
   /* expect PDF was added to KVStore */
   EXPECT_TRUE(kv->has_pdf(new_key));
@@ -190,22 +206,22 @@ TEST_F(TestCommandRun, test_map) {
   Key key(string("owned 0"));
   shared_ptr<SumRower> rower = make_shared<SumRower>(0);
   MapCommand cmd(key, rower);
-  WriteCursor dest;
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+  cmd.run(*kv, 0, get_respond());
+  EXPECT_TRUE(result);
 
-  ReadCursor rc(dest.length(), dest.bytes());
+  ReadCursor rc(output->data());
   EXPECT_EQ(rower->get_sum_result(), yield<uint64_t>(rc));
   EXPECT_TRUE(empty(rc));
 }
 
 TEST_F(TestCommandRun, test_get_df_info) {
   GetDFInfoCommand cmd;
-  WriteCursor dest;
-  /* command should return true to show success, running command writes output
-   * into dest */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+  cmd.run(*kv, 0, get_respond());
+  /* command should result in true to show success, running command writes
+   * output into dest */
+  EXPECT_TRUE(result);
 
-  ReadCursor rc = dest;
+  ReadCursor rc(output->data());
   vector<GetDFInfoCommand::result_t> results;
   GetDFInfoCommand::unpack_results(rc, results);
   EXPECT_TRUE(empty(rc));
@@ -245,11 +261,12 @@ TEST_F(TestCommandRun, test_get_df_info) {
 TEST_F(TestCommandRun, test_get_df_info__with_query_key__owned) {
   GetDFInfoCommand cmd(Key("owned 0"));
   WriteCursor dest;
+  cmd.run(*kv, 0, get_respond());
   /* command should return true to show success, running command writes output
    * into dest */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+  EXPECT_TRUE(result);
 
-  ReadCursor rc = dest;
+  ReadCursor rc(output->data());
   vector<GetDFInfoCommand::result_t> results;
   GetDFInfoCommand::unpack_results(rc, results);
   EXPECT_TRUE(empty(rc));
@@ -266,12 +283,12 @@ TEST_F(TestCommandRun, test_get_df_info__with_query_key__owned) {
 
 TEST_F(TestCommandRun, test_get_df_info__with_query_key__not_owned) {
   GetDFInfoCommand cmd(Key("not-owned 0"));
-  WriteCursor dest;
-  /* command should return true to show success, running command writes output
-   * into dest */
-  EXPECT_TRUE(cmd.run(*kv, 0, dest));
+  cmd.run(*kv, 0, get_respond());
+  /* command should result in true to show success, running command writes
+   * output */
+  EXPECT_TRUE(result);
 
-  ReadCursor rc = dest;
+  ReadCursor rc(output->data());
   vector<GetDFInfoCommand::result_t> results;
   GetDFInfoCommand::unpack_results(rc, results);
   EXPECT_TRUE(empty(rc));

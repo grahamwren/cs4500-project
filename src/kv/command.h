@@ -88,7 +88,9 @@ public:
   PutCommand(const ChunkKey &chunk_key, const DataChunk &dc)
       : chunk_key(chunk_key), data(dc) {}
   PutCommand(ReadCursor &c)
-      : chunk_key(yield<ChunkKey>(c)), data(yield<sized_ptr<uint8_t>>(c)) {}
+      : chunk_key(yield<ChunkKey>(c)),
+        /* borrow data from ReadCursor 🤞 */
+        data(yield<sized_ptr<uint8_t>>(c), true) {}
 
   Type get_type() const { return Type::PUT; }
 

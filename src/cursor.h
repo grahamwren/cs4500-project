@@ -142,6 +142,14 @@ public:
     data.insert(data.end(), item_ptr, item_ptr + sizeof(T));
   }
 
+  template <typename T> void write(int len, T *start) {
+    static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
+                  "Type must be trivially copyable");
+    const uint8_t *start_ptr = reinterpret_cast<const uint8_t *>(start);
+    const uint8_t *end_ptr = start_ptr + (len * sizeof(T));
+    data.insert(data.end(), start_ptr, end_ptr);
+  }
+
   int length() const { return data.size(); }
   uint8_t *bytes() { return &data[0]; }
 };
@@ -154,21 +162,23 @@ template <typename T> inline void pack(WriteCursor &c, T val) {
 template <> inline void pack(WriteCursor &c, sized_ptr<uint8_t> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(uint8_t) * ptr.len));
   c.write((int)ptr.len);
-  for (int i = 0; i < ptr.len; i++) {
-    c.write(ptr[i]);
-  }
+  c.write(ptr.len, ptr.ptr);
+}
+
+template <> inline void pack(WriteCursor &c, sized_ptr<int> ptr) {
+  c.ensure_space(sizeof(int) + (sizeof(int) * ptr.len));
+  c.write((int)ptr.len);
+  c.write(ptr.len, ptr.ptr);
 }
 
 template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(char) * ptr.len));
   c.write((int)ptr.len);
-  for (int i = 0; i < ptr.len; i++) {
-    c.write(ptr[i]);
-  }
+  c.write(ptr.len, ptr.ptr);
 }
 
 template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
-  pack(c, (sized_ptr<const char>)ptr);
+  pack(c, (const sized_ptr<const char> &)ptr);
 }
 
 template <> inline void pack(WriteCursor &c, std::string *const val) {

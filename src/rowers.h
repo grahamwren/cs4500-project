@@ -41,6 +41,8 @@ public:
   }
 
   uint64_t get_sum_result() const { return sum_result; }
+
+  unique_ptr<Rower> clone() const { return make_unique<SumRower>(col); };
 };
 
 class WordCountRower : public Rower {
@@ -101,6 +103,8 @@ public:
   }
 
   const unordered_map<string, int> &get_results() const { return results; }
+
+  unique_ptr<Rower> clone() const { return make_unique<WordCountRower>(col); };
 };
 
 /**
@@ -115,23 +119,23 @@ private:
 
   bool has_term(int cand) const { return terms.find(cand) != terms.end(); }
 
-  set<int> results;     // old results and new results
+  // set<int> results;     // old results and new results
   set<int> new_results; // just the new results
 
 public:
-  SearchIntIntRower(int result_col, int search_col, const set<int> &terms,
-                    const set<int> &old_res)
-      : result_col(result_col), search_col(search_col), terms(terms),
-        results(old_res) {}
+  SearchIntIntRower(int result_col, int search_col, const set<int> &terms)
+      : result_col(result_col), search_col(search_col), terms(terms)
+  // , results(old_res)
+  {}
   SearchIntIntRower(ReadCursor &c)
       : result_col(yield<int>(c)), search_col(yield<int>(c)) {
     int tlen = yield<int>(c);
     for (int i = 0; i < tlen; i++)
       terms.emplace(yield<int>(c));
 
-    int orlen = yield<int>(c);
-    for (int i = 0; i < orlen; i++)
-      results.emplace(yield<int>(c));
+    // int orlen = yield<int>(c);
+    // for (int i = 0; i < orlen; i++)
+    //   results.emplace(yield<int>(c));
   }
   Type get_type() const { return Type::SEARCH_INT_INT; }
 
@@ -139,11 +143,12 @@ public:
     int val = row.get<int>(search_col);
     if (has_term(val)) {
       int cand = row.get<int>(result_col);
-      /* if a new result, append to both sets */
-      if (results.find(cand) == results.end()) {
-        results.emplace(cand);
-        new_results.emplace(cand);
-      }
+      new_results.emplace(cand);
+      // /* if a new result, append to both sets */
+      // if (results.find(cand) == results.end()) {
+      //   // results.emplace(cand);
+      //   new_results.emplace(cand);
+      // }
     }
     return true;
   }
@@ -158,14 +163,16 @@ public:
     pack<int>(c, search_col);
     pack<int>(c, result_col);
 
+    c.ensure_space(terms.size() * sizeof(int));
     pack<int>(c, terms.size());
     for (int term : terms)
       pack(c, term);
 
-    /* pack old-results */
-    pack<int>(c, results.size());
-    for (int res : results)
-      pack(c, res);
+    // /* pack old-results */
+    // c.ensure_space(results.size() * sizeof(int));
+    // pack<int>(c, results.size());
+    // for (int res : results)
+    //   pack(c, res);
   }
 
   void serialize_results(WriteCursor &c) const {
@@ -189,20 +196,24 @@ public:
     for (int i = 1; i < 20 && i < terms.size(); i++)
       cout << "," << *t_it++;
     if (terms.size() > 20)
-      cout << ", ... " << terms.size() - 20 << "more terms";
-    cout << "] AND " << search_col << " NOT IN [";
+      cout << ", ... " << terms.size() - 20 << " more terms";
+    cout << "]"; // AND " << result_col << " NOT IN [";
 
-    auto or_it = terms.begin();
-    if (results.size() > 0)
-      cout << *or_it++;
-    for (int i = 1; i < 20 && i < results.size(); i++)
-      cout << "," << *or_it++;
-    if (results.size() > 20)
-      cout << ", ... " << results.size() - 20 << "more old results";
-    cout << "]";
+    // auto or_it = results.begin();
+    // if (results.size() > 0)
+    //   cout << *or_it++;
+    // for (int i = 1; i < 20 && i < results.size(); i++)
+    //   cout << "," << *or_it++;
+    // if (results.size() > 20)
+    //   cout << ", ... " << results.size() - 20 << " more old results";
+    // cout << "]";
   }
 
   set<int> &get_results() { return new_results; }
+
+  unique_ptr<Rower> clone() const {
+    return make_unique<SearchIntIntRower>(result_col, search_col, terms);
+  };
 };
 
 inline unique_ptr<Rower> unpack_rower(ReadCursor &c) {

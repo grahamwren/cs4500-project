@@ -27,25 +27,6 @@ public:
     new_users.emplace(LINUS); // should linus be included?
   }
 
-  void ensure_keys_removed() {
-    cluster.remove(commits_key);
-    // cluster.remove(users_key);
-    // cluster.remove(projects_key);
-  }
-
-  void fill_cluster() {
-    bool import_res;
-    // import_res = cluster.load_file(projects_key, "/datasets/projects.ltgt");
-    // cout << "Loaded: projects" << endl;
-    // assert(import_res);
-    import_res = cluster.load_file(commits_key, "/datasets/commits.ltgt");
-    cout << "Loaded: commits" << endl;
-    assert(import_res);
-    // import_res = cluster.load_file(users_key, "/datasets/users.ltgt");
-    // cout << "Loaded: users" << endl;
-    // assert(import_res);
-  }
-
   void find_collabs(int step) {
     cout << "Step: " << step << endl;
 
@@ -54,8 +35,7 @@ public:
      * FROM commits
      * WHERE author_id IN new_users AND project_id NOT IN tagged_projects
      */
-    auto proj_rower =
-        make_shared<SearchIntIntRower>(0, 1, new_users, tagged_projects);
+    auto proj_rower = make_shared<SearchIntIntRower>(0, 1, new_users);
 
     cluster.map(commits_key, proj_rower);
     const set<int> &new_proj_res = proj_rower->get_results();
@@ -69,8 +49,7 @@ public:
      * FROM commits
      * WHERE project_id IN new_projects AND author_id NOT IN tagged_users
      */
-    auto collabs_rower =
-        make_shared<SearchIntIntRower>(1, 0, new_proj_res, tagged_users);
+    auto collabs_rower = make_shared<SearchIntIntRower>(1, 0, new_proj_res);
     cluster.map(commits_key, collabs_rower);
     auto &new_users_res = collabs_rower->get_results();
     new_users.clear();
@@ -82,8 +61,6 @@ public:
   }
 
   void run() {
-    ensure_keys_removed();
-    fill_cluster();
     for (int i = 0; i < DEGREES; i++)
       find_collabs(i);
   }

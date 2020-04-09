@@ -3,6 +3,7 @@
 #include "dataframe_chunk.h"
 #include <algorithm>
 #include <set>
+#include <thread>
 #include <unordered_map>
 
 using namespace std;
@@ -11,6 +12,18 @@ class PartialDataFrame : public DataFrame {
 protected:
   const Schema schema;
   unordered_map<int, DataFrameChunk> chunks;
+
+  void pmap_helper(const vector<int> &c_idxs, Rower &rower) const {
+    Row row(get_schema());
+    for (int ci : c_idxs) {
+      auto &chunk = chunks.at(ci);
+      int start_i = ci * DF_CHUNK_SIZE;
+      for (int i = start_i; i < start_i + chunk.nrows(); i++) {
+        fill_row(i, row);
+        rower.accept(row);
+      }
+    }
+  }
 
 public:
   PartialDataFrame(const Schema &scm) : schema(scm) {}
@@ -52,14 +65,36 @@ public:
    * Runs the given rower over the Chunks available in this PartialDataFrame
    */
   void map(Rower &rower) const {
-    Row row(get_schema());
+    if (chunks.size() == 0)
+      return;
+
+    int threads_to_use = min((int)THREAD_COUNT, (int)chunks.size());
+
+    /* distribute the chunks for the threads */
+    vector<int> splits[threads_to_use];
+    int i = 0;
     for (auto &e : chunks) {
-      auto &chunk = e.second;
-      int start_i = e.first * DF_CHUNK_SIZE;
-      for (int i = start_i; i < start_i + chunk.nrows(); i++) {
-        fill_row(i, row);
-        rower.accept(row);
-      }
+      splits[i].push_back(e.first);
+      i = (i + 1) % threads_to_use;
+    }
+
+    unique_ptr<Rower> rowers[threads_to_use - 1];
+    vector<thread> threads;
+    /* start threads_to_use - 1 threads */
+    for (int i = 0; i < threads_to_use - 1; i++) {
+      rowers[i] = rower.clone();
+      Rower &rower = *rowers[i];
+      vector<int> &split = splits[i];
+      threads.emplace_back([&]() { pmap_helper(split, rower); });
+    }
+
+    /* run map on main thread with last split */
+    pmap_helper(splits[threads_to_use - 1], rower);
+
+    /* join all rowers to main */
+    for (int i = 0; i < threads_to_use - 1; i++) {
+      threads[i].join();
+      rower.join(*rowers[i]);
     }
   }
 

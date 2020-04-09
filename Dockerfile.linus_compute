@@ -7,6 +7,6 @@ ARG debug
 
 ADD . /eau2
 WORKDIR /eau2
-RUN make -B build/linus_demo.exe DEBUG=${debug:-false}
-ENTRYPOINT ["./build/linus_demo.exe"]
+RUN make -B build/linus_compute.exe DEBUG=${debug:-false}
+ENTRYPOINT ["./build/linus_compute.exe"]
 CMD ["--ip", "127.0.0.1"]

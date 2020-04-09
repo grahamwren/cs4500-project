@@ -43,7 +43,10 @@ $(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
-$(BUILD_DIR)/linus_demo.exe: $(SRC_DIR)/linus_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/linus_load_data.exe: $(SRC_DIR)/linus_load_data.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/linus_compute.exe: $(SRC_DIR)/linus_compute.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/word_count_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
@@ -146,10 +149,10 @@ launch_cluster: docker_clean
 	docker run -d --network clients-project --ip 172.168.0.3 kv_node:0.1 --ip 172.168.0.3 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.4 kv_node:0.1 --ip 172.168.0.4 --server-ip 172.168.0.2
 	docker run -d --network clients-project --ip 172.168.0.5 kv_node:0.1 --ip 172.168.0.5 --server-ip 172.168.0.2
-	docker run -d --network clients-project --ip 172.168.0.6 kv_node:0.1 --ip 172.168.0.6 --server-ip 172.168.0.2
-	docker run -d --network clients-project --ip 172.168.0.7 kv_node:0.1 --ip 172.168.0.7 --server-ip 172.168.0.2
-	docker run -d --network clients-project --ip 172.168.0.8 kv_node:0.1 --ip 172.168.0.8 --server-ip 172.168.0.2
-	docker run -d --network clients-project --ip 172.168.0.9 kv_node:0.1 --ip 172.168.0.9 --server-ip 172.168.0.2
+	# docker run -d --network clients-project --ip 172.168.0.6 kv_node:0.1 --ip 172.168.0.6 --server-ip 172.168.0.2
+	# docker run -d --network clients-project --ip 172.168.0.7 kv_node:0.1 --ip 172.168.0.7 --server-ip 172.168.0.2
+	# docker run -d --network clients-project --ip 172.168.0.8 kv_node:0.1 --ip 172.168.0.8 --server-ip 172.168.0.2
+	# docker run -d --network clients-project --ip 172.168.0.9 kv_node:0.1 --ip 172.168.0.9 --server-ip 172.168.0.2
 
 
 run_app:

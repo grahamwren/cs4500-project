@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <thread>
 #include <tuple>
 
 #ifndef CLUSTER_LOG
@@ -162,7 +163,7 @@ public:
     auto df_info_opt = get_df_info(key);
     if (df_info_opt) {
       DFInfo &df_info = df_info_opt->get();
-      /* update DFInfo for this DF if this is a new chunk_idx */
+      /* update DFInfo for this DF if this is a new chunk_idx, thread-safe */
       df_info.try_update_largest_chunk_idx(chunk_idx);
 
       const IpV4Addr &ip = seek_in_nodes(df_info.get_owner(), chunk_idx);
@@ -184,35 +185,62 @@ public:
    */
   void map(const Key &key, shared_ptr<Rower> rower) const {
     if (get_df_info(key)) {
-      unordered_map<const IpV4Addr, int> result_ids;
       StartMapCommand start_cmd(key, rower);
       WriteCursor wc;
+      cout << "serializing cmd" << endl;
       start_cmd.serialize(wc);
-      for (const IpV4Addr &ip : nodes) {
-        optional<DataChunk> result = send_cmd(ip, wc);
-        if (result) {
-          ReadCursor rc(result->data());
-          result_ids.emplace(ip, yield<int>(rc));
-        } else {
-          cout << "ERROR: cluster map failed to start on Node(" << ip << ")"
-               << endl;
-        }
+      cout << "serializing done" << endl;
+      vector<thread> threads;
+      unordered_map<const IpV4Addr, int> result_ids;
+      mutex results_mtx;
+      for (const IpV4Addr &ip : nodes)
+        threads.emplace_back([&]() {
+          optional<DataChunk> result = send_cmd(ip, wc);
+          cout << "sent to " << ip << endl;
+          if (result) {
+            ReadCursor rc(result->data());
+            unique_lock lock(results_mtx);
+            result_ids.emplace(ip, yield<int>(rc));
+            lock.unlock();
+          } else {
+            cout << "ERROR: cluster map failed to start on Node(" << ip << ")"
+                 << endl;
+          }
+        });
+
+      while (threads.size()) {
+        threads.back().join();
+        threads.pop_back();
       }
+
       cout << "Started mapping all nodes: " << key << " " << *rower << endl;
-      for (const IpV4Addr &ip : nodes) {
-        int result_id = result_ids.at(ip);
-        FetchMapResultCommand fetch_cmd(result_id);
-        optional<DataChunk> result = send_cmd(ip, fetch_cmd);
-        if (result) {
-          ReadCursor rc(result->data());
-          rower->join_serialized(rc);
-          if (CLUSTER_LOG)
-            cout << "Cluster.map(partial_result: " << *rower << ")" << endl;
-        } else {
-          cout << "ERROR: cluster map failed to find result on Node(" << ip
-               << ")" << endl;
-        }
+      mutex join_mtx;
+      for (const IpV4Addr &ip : nodes)
+        threads.emplace_back([&]() {
+          int result_id = result_ids.at(ip);
+          FetchMapResultCommand fetch_cmd(result_id);
+          cout << "recv results" << endl;
+          optional<DataChunk> result = send_cmd(ip, fetch_cmd);
+          cout << "recv results done" << endl;
+          if (result) {
+            ReadCursor rc(result->data());
+            unique_lock lock(join_mtx);
+            rower->join_serialized(rc);
+            lock.unlock();
+            if (CLUSTER_LOG)
+              cout << "Cluster.map(partial_result: " << *rower << ")" << endl;
+          } else {
+            cout << "ERROR: cluster map failed to find result on Node(" << ip
+                 << ")" << endl;
+          }
+        });
+
+      while (threads.size()) {
+        threads.back().join();
+        threads.pop_back();
       }
+
+      cout << "Done mapping all nodes" << endl;
     }
   }
 
@@ -283,17 +311,54 @@ public:
 
     /* create DF in cluster */
     create(key, scm);
+    auto df_info_opt = get_df_info(key);
+    DFInfo &df_info = df_info_opt->get();
 
-    for (int ci = 0; true; ci++) {
-      DataFrameChunk dfc(scm);
-      bool success = parser.parse_n_lines(DF_CHUNK_SIZE, dfc);
+    bool more_to_parse = true;
+    vector<thread> threads;
+    threads.reserve(nodes.size());
+    vector<DataFrameChunk> dfcs;
+    dfcs.reserve(nodes.size());
+    int chunk_idx = 0;
+    while (more_to_parse) {
+      /* parse a chunk for each node sequentially */
+      for (int i = 0; i < nodes.size(); i++) {
+        dfcs.emplace_back(scm);
+        bool good_parse = parser.parse_n_lines(DF_CHUNK_SIZE, dfcs.back());
+        if (!good_parse)
+          dfcs.pop_back(); // if parse failed, remove DFC we just added
 
-      if (success)
-        put(key, ci, dfc);
+        /* there is more to parse if we successfully filled a chunk */
+        more_to_parse = good_parse && dfcs.back().is_full();
+        /* if not, break out early */
+        if (!more_to_parse)
+          break;
+      }
 
-      /* if parse failed, or didn't fill chunk */
-      if (!success || !dfc.is_full())
-        break;
+      /* send out parsed chunks in parallel */
+      for (DataFrameChunk &dfc : dfcs) {
+        int ci = chunk_idx++;
+        df_info.try_update_largest_chunk_idx(ci);
+        const IpV4Addr &ip = seek_in_nodes(df_info.get_owner(), ci);
+        cout << "starting thread to send chunk: " << ci << " to " << ip << endl;
+        threads.emplace_back([&]() {
+          WriteCursor wc;
+          dfc.serialize(wc);
+
+          /* since the WriteCursor and this cmd have the same lifetime, borrow
+           * the data for the chunk */
+          PutCommand put_cmd(ChunkKey(key, ci), DataChunk(wc, true));
+          optional<DataChunk> result = send_cmd(ip, put_cmd);
+          assert(result); // just Exit if we fail to put a chunk
+        });
+      }
+      /* join to all put threads */
+      while (threads.size()) {
+        threads.back().join();
+        threads.pop_back();
+      }
+      /* clear out chunks once all sent */
+      dfcs.clear();
     }
 
     delete[] buf;

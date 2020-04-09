@@ -30,6 +30,8 @@ public:
         }) {
     /* only copy if not borrowing, and there is data to copy */
     if (!borrow && sp.ptr && sp.len > 0) {
+      if (sp.len > 4096) // warn about big copies
+        cout << "WARNING: copying " << sp.len << endl;
       memcpy(bytes.get(), sp.ptr, sp.len);
     }
   }

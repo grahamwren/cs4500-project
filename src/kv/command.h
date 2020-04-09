@@ -16,7 +16,15 @@ using namespace std;
 
 class Command {
 public:
-  enum Type : uint8_t { GET, PUT, NEW, GET_DF_INFO, MAP, DELETE };
+  enum Type : uint8_t {
+    GET,
+    PUT,
+    NEW,
+    GET_DF_INFO,
+    START_MAP,
+    FETCH_MAP_RESULT,
+    DELETE
+  };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
   virtual void run(KVStore &, const IpV4Addr &,
@@ -74,14 +82,13 @@ public:
 class PutCommand : public Command {
 private:
   ChunkKey chunk_key;
-  std::unique_ptr<DataChunk> data;
+  DataChunk data;
 
 public:
-  PutCommand(const ChunkKey &chunk_key, unique_ptr<DataChunk> &&dc)
-      : chunk_key(chunk_key), data(move(dc)) {}
+  PutCommand(const ChunkKey &chunk_key, const DataChunk &dc)
+      : chunk_key(chunk_key), data(dc) {}
   PutCommand(ReadCursor &c)
-      : chunk_key(yield<ChunkKey>(c)),
-        data(new DataChunk(yield<sized_ptr<uint8_t>>(c))) {}
+      : chunk_key(yield<ChunkKey>(c)), data(yield<sized_ptr<uint8_t>>(c)) {}
 
   Type get_type() const { return Type::PUT; }
 
@@ -93,7 +100,7 @@ public:
       respond(true); // just respond OK
 
     PartialDataFrame &pdf = kv.get_pdf(chunk_key.key);
-    ReadCursor rc(data->len(), data->ptr());
+    ReadCursor rc(data.data());
     if (pdf.has_chunk(chunk_key.chunk_idx)) {
       pdf.replace_df_chunk(chunk_key.chunk_idx, rc);
     } else {
@@ -104,19 +111,18 @@ public:
   void serialize(WriteCursor &wc) const {
     pack(wc, get_type());
     pack<const ChunkKey &>(wc, chunk_key);
-    pack(wc, data->data());
+    pack(wc, data.data());
   }
 
   ostream &out(ostream &output) const {
-    output << "key: " << chunk_key << ", data: " << *data;
+    output << "key: " << chunk_key << ", data: " << data;
     return output;
   }
 
   bool equals(const Command &o) const {
     if (get_type() == o.get_type()) {
       const PutCommand &other = dynamic_cast<const PutCommand &>(o);
-      return chunk_key == other.chunk_key &&
-             (data && other.data ? *data == *other.data : data == other.data);
+      return chunk_key == other.chunk_key && data == other.data;
     }
     return false;
   }
@@ -276,28 +282,39 @@ public:
   }
 };
 
-class MapCommand : public Command {
+class StartMapCommand : public Command {
 private:
   Key key;
   shared_ptr<Rower> rower;
 
 public:
-  MapCommand(const Key &key, shared_ptr<Rower> rower) : key(key), rower(rower) {
+  StartMapCommand(const Key &key, shared_ptr<Rower> rower)
+      : key(key), rower(rower) {
     assert(rower);
   }
-  MapCommand(ReadCursor &c) : key(yield<Key>(c)), rower(unpack_rower(c)) {}
-  Type get_type() const { return Type::MAP; }
+  StartMapCommand(ReadCursor &c) : key(yield<Key>(c)), rower(unpack_rower(c)) {}
+  Type get_type() const { return Type::START_MAP; }
 
   void run(KVStore &kv, const IpV4Addr &src,
            const Node::respond_fn_t &respond) const {
-    if (kv.has_pdf(key)) {
-      PartialDataFrame &pdf = kv.get_pdf(key);
-      pdf.map(*rower); // local map
-      WriteCursor wc;
-      rower->serialize_results(wc);
-      return respond(true, sized_ptr(wc.length(), wc.bytes()));
+    if (!kv.has_pdf(key)) {
+      return respond(false); // return and respond ERR
     }
-    return respond(false);
+    int result_id = kv.get_result_id();
+    WriteCursor wc;
+    pack(wc, result_id);
+    /* respond OK early with result_id */
+    respond(true, sized_ptr(wc.length(), wc.bytes()));
+
+    wc.reset();
+
+    /* compute map result */
+    PartialDataFrame &pdf = kv.get_pdf(key);
+    pdf.map(*rower); // local map
+    rower->serialize_results(wc);
+
+    /* store result under result_id */
+    kv.insert_map_result(result_id, DataChunk(wc));
   }
 
   void serialize(WriteCursor &wc) const {
@@ -307,14 +324,54 @@ public:
   }
 
   ostream &out(ostream &output) const {
-    output << "(key: " << key << ", rower: " << rower->get_type() << ")";
+    output << "key: " << key << ", rower: " << *rower;
     return output;
   }
 
   bool equals(const Command &o) const {
     if (get_type() == o.get_type()) {
-      const MapCommand &other = dynamic_cast<const MapCommand &>(o);
+      const StartMapCommand &other = dynamic_cast<const StartMapCommand &>(o);
       return key == other.key && rower->get_type() == other.rower->get_type();
+    }
+    return false;
+  }
+};
+
+class FetchMapResultCommand : public Command {
+private:
+  int result_id;
+
+public:
+  FetchMapResultCommand(int result_id) : result_id(result_id) {}
+  FetchMapResultCommand(ReadCursor &c) : result_id(yield<int>(c)) {}
+  Type get_type() const { return Type::FETCH_MAP_RESULT; }
+
+  void run(KVStore &kv, const IpV4Addr &src,
+           const Node::respond_fn_t &respond) const {
+    if (kv.has_map_result(result_id)) {
+      const DataChunk &result = kv.get_map_result(result_id);
+      respond(true, result.data());
+      kv.remove_map_result(result_id);
+      return;
+    }
+    return respond(false);
+  }
+
+  void serialize(WriteCursor &wc) const {
+    pack(wc, get_type());
+    pack<int>(wc, result_id);
+  }
+
+  ostream &out(ostream &output) const {
+    output << "result_id: " << result_id;
+    return output;
+  }
+
+  bool equals(const Command &o) const {
+    if (get_type() == o.get_type()) {
+      const FetchMapResultCommand &other =
+          dynamic_cast<const FetchMapResultCommand &>(o);
+      return result_id == other.result_id;
     }
     return false;
   }
@@ -334,8 +391,11 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
   case Command::Type::DELETE:
     output << "DELETE";
     break;
-  case Command::Type::MAP:
-    output << "MAP";
+  case Command::Type::START_MAP:
+    output << "START_MAP";
+    break;
+  case Command::Type::FETCH_MAP_RESULT:
+    output << "FETCH_MAP_RESULT";
     break;
   case Command::Type::GET_DF_INFO:
     output << "GET_DF_INFO";
@@ -347,9 +407,9 @@ ostream &operator<<(ostream &output, const Command::Type &t) {
 }
 
 ostream &operator<<(ostream &output, const Command &c) {
-  output << "Command(type: " << c.get_type() << ", ";
+  output << "Command(type: " << c.get_type() << " {";
   c.out(output);
-  output << ")";
+  output << "})";
   return output;
 }
 
@@ -366,8 +426,10 @@ unique_ptr<Command> Command::unpack(ReadCursor &c) {
     return make_unique<DeleteCommand>(c);
   case Command::Type::GET_DF_INFO:
     return make_unique<GetDFInfoCommand>(c);
-  case Command::Type::MAP:
-    return make_unique<MapCommand>(c);
+  case Command::Type::START_MAP:
+    return make_unique<StartMapCommand>(c);
+  case Command::Type::FETCH_MAP_RESULT:
+    return make_unique<FetchMapResultCommand>(c);
   default:
     cout << "ERROR: unknown command type: " << (unsigned int)type << endl;
     assert(false); // unknown type

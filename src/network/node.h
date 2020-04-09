@@ -28,14 +28,14 @@ public:
   /* call once function to respond to socket, not thread-safe */
   struct respond_fn_t {
     respond_fn_t(const respond_fn_t &) = delete;
-    function<void(bool, const sized_ptr<uint8_t> &)> f;
+    function<void(bool, const DataChunk &)> f;
     mutable bool called = false;
     void operator()(bool res) const {
       assert(!called);
       called = true;
-      f(res, sized_ptr<uint8_t>(0, nullptr));
+      f(res, DataChunk(0, nullptr));
     }
-    void operator()(bool res, const sized_ptr<uint8_t> &data) const {
+    void operator()(bool res, const DataChunk &data) const {
       assert(!called);
       called = true;
       f(res, data);
@@ -124,13 +124,13 @@ protected:
 
   void handle_new_peer_pkt(const DataSock &sock, const Packet &req) {
     /* assume data is an IpV4Addr */
-    assert(req.data->ptr());
+    assert(req.data.ptr());
     assert(req.hdr.data_len() == sizeof(IpV4Addr));
 
     Packet resp(my_addr, req.hdr.src_addr, PacketType::OK);
     sock.send_pkt(resp);
 
-    const IpV4Addr &a = *(IpV4Addr *)req.data->ptr();
+    const IpV4Addr &a = *(IpV4Addr *)req.data.ptr().get();
     /* if my_addr then ignore */
     if (a == my_addr)
       return;
@@ -153,8 +153,8 @@ protected:
   }
 
   void handle_data_pkt(const DataSock &sock, const Packet &req) const {
-    ReadCursor rc(req.data->data());
-    respond_fn_t resp_fn = {[&](bool res, const sized_ptr<uint8_t> &data) {
+    ReadCursor rc(req.data.data());
+    respond_fn_t resp_fn = {[&](bool res, const DataChunk &data) {
       if (res) {
         Packet ok_resp(my_addr, req.hdr.src_addr, PacketType::OK, data);
         sock.send_pkt(ok_resp);
@@ -179,7 +179,7 @@ protected:
 
     assert(resp.hdr.type == PacketType::OK);
 
-    IpV4Addr *ips = (IpV4Addr *)resp.data->ptr();
+    IpV4Addr *ips = (IpV4Addr *)resp.data.ptr().get();
     int n_addrs = resp.hdr.data_len() / sizeof(IpV4Addr);
     peers.insert(ips, ips + n_addrs);
     print_peers();

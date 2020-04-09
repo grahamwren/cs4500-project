@@ -50,8 +50,8 @@ protected:
     assert(resp.ok());
 
     /* assume response is list of ips */
-    int n_ips = resp.data->len() / sizeof(IpV4Addr);
-    IpV4Addr *ips = reinterpret_cast<IpV4Addr *>(resp.data->ptr());
+    int n_ips = resp.data.len() / sizeof(IpV4Addr);
+    IpV4Addr *ips = reinterpret_cast<IpV4Addr *>(resp.data.ptr().get());
     for (int i = 0; i < n_ips; i++) {
       nodes.emplace(ips[i]);
     }
@@ -76,12 +76,18 @@ protected:
       cout << "Cluster.send(" << cmd << ")" << endl;
     WriteCursor wc;
     cmd.serialize(wc);
-    Packet req(0, ip, PacketType::DATA, wc);
+    return send_cmd(ip, wc);
+  }
+
+  optional<DataChunk> send_cmd(const IpV4Addr &ip,
+                               const sized_ptr<uint8_t> &data) const {
+    /* borrow memory from data for DataChunk */
+    Packet req(0, ip, PacketType::DATA, DataChunk(data, true));
     Packet resp = DataSock::fetch(req);
     if (CLUSTER_LOG)
       cout << "Cluster.recv(" << resp << ")" << endl;
     if (resp.ok())
-      return move(*resp.data);
+      return move(resp.data);
     else
       return nullopt;
   }
@@ -140,7 +146,7 @@ public:
       GetCommand get_cmd(key, index);
       optional<DataChunk> result = send_cmd(ip, get_cmd);
       if (result) {
-        ReadCursor rc(result->len(), result->ptr());
+        ReadCursor rc(result->len(), result->ptr().get());
         return DataFrameChunk(df_info.get_schema(), rc);
       }
     }
@@ -163,8 +169,9 @@ public:
       WriteCursor wc;
       dfc.serialize(wc);
 
-      /* TODO: DataChunk constructor copies data */
-      PutCommand put_cmd(ChunkKey(key, chunk_idx), make_unique<DataChunk>(wc));
+      /* since the WriteCursor and this cmd have the same lifetime, borrow the
+       * data for the chunk */
+      PutCommand put_cmd(ChunkKey(key, chunk_idx), DataChunk(wc, true));
       optional<DataChunk> result = send_cmd(ip, put_cmd);
       return !!result;
     } else
@@ -177,17 +184,33 @@ public:
    */
   void map(const Key &key, shared_ptr<Rower> rower) const {
     if (get_df_info(key)) {
-      MapCommand cmd(key, rower);
+      unordered_map<const IpV4Addr, int> result_ids;
+      StartMapCommand start_cmd(key, rower);
+      WriteCursor wc;
+      start_cmd.serialize(wc);
       for (const IpV4Addr &ip : nodes) {
-        optional<DataChunk> result = send_cmd(ip, cmd);
+        optional<DataChunk> result = send_cmd(ip, wc);
         if (result) {
-          ReadCursor rc(result->len(), result->ptr());
+          ReadCursor rc(result->data());
+          result_ids.emplace(ip, yield<int>(rc));
+        } else {
+          cout << "ERROR: cluster map failed to start on Node(" << ip << ")"
+               << endl;
+        }
+      }
+      cout << "Started mapping all nodes: " << key << " " << *rower << endl;
+      for (const IpV4Addr &ip : nodes) {
+        int result_id = result_ids.at(ip);
+        FetchMapResultCommand fetch_cmd(result_id);
+        optional<DataChunk> result = send_cmd(ip, fetch_cmd);
+        if (result) {
+          ReadCursor rc(result->data());
           rower->join_serialized(rc);
           if (CLUSTER_LOG)
             cout << "Cluster.map(partial_result: " << *rower << ")" << endl;
         } else {
-          if (CLUSTER_LOG)
-            cout << "ERROR: cluster map failed for node: " << ip << endl;
+          cout << "ERROR: cluster map failed to find result on Node(" << ip
+               << ")" << endl;
         }
       }
     }

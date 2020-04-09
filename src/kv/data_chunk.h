@@ -15,48 +15,35 @@ using namespace std;
  */
 class DataChunk {
 private:
-  sized_ptr<uint8_t> _data;
+  int _len;
+  shared_ptr<uint8_t> bytes;
 
 public:
-  DataChunk() : _data(0, nullptr) {}
-  DataChunk(int n, unique_ptr<uint8_t> &&b) : _data(n, b.release()) {}
-  DataChunk(int n, uint8_t *b) : _data(n, new uint8_t[n]) {
-    if (b) {
-      memcpy(_data.ptr, b, _data.len);
+  DataChunk() : _len(0), bytes(nullptr) {}
+  DataChunk(int n, const shared_ptr<uint8_t> &b) : _len(n), bytes(b) {}
+  /* only copy data from sized_ptr */
+  DataChunk(const sized_ptr<uint8_t> &sp, bool borrow = false)
+      : _len(sp.len),
+        bytes(borrow ? sp.ptr : new uint8_t[_len], [borrow](uint8_t *ptr) {
+          if (!borrow) // only delete ptr if we didn't borrow it
+            delete[] ptr;
+        }) {
+    /* only copy if not borrowing, and there is data to copy */
+    if (!borrow && sp.ptr && sp.len > 0) {
+      memcpy(bytes.get(), sp.ptr, sp.len);
     }
   }
-
-  /* allow copy from sized_ptr */
-  DataChunk(const sized_ptr<uint8_t> &sp) : DataChunk(sp.len, sp.ptr) {}
   DataChunk(ReadCursor &c) : DataChunk(yield<sized_ptr<uint8_t>>(c)) {}
 
-  /* disallow copy from DataChunk */
-  DataChunk(const DataChunk &dc) = delete;
+  sized_ptr<uint8_t> data() const { return sized_ptr(len(), bytes.get()); }
+  int len() const { return _len; }
+  const shared_ptr<uint8_t> &ptr() const { return bytes; }
 
-  DataChunk(DataChunk &&c) : _data(c.len(), c.ptr()) {
-    c._data.len = 0;
-    c._data.ptr = nullptr;
-  }
-  ~DataChunk() { delete[] ptr(); }
-
-  DataChunk &operator=(DataChunk &&other) {
-    _data.len = other.len();
-    other._data.len = 0;
-
-    _data.ptr = other.ptr();
-    other._data.ptr = nullptr;
-    return *this;
-  }
-
-  const sized_ptr<uint8_t> &data() const { return _data; }
-  int len() const { return _data.len; }
-  uint8_t *ptr() const { return _data.ptr; }
-
-  uint8_t operator[](int i) const { return _data[i]; }
+  uint8_t operator[](int i) const { return bytes.get()[i]; }
 
   bool operator==(const DataChunk &other) const {
     return len() == other.len() &&
-           std::equal(ptr(), ptr() + len(), other.ptr());
+           equal(ptr().get(), ptr().get() + len(), other.ptr().get());
   }
 };
 

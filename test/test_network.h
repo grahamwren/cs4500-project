@@ -1,3 +1,4 @@
+#include "kv/kv.h"
 #include "network/node.h"
 #include "network/packet.h"
 #include "network/sock.h"

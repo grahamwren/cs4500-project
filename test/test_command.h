@@ -18,8 +18,8 @@ TEST(TestGetCommand, test_serialize_unpack) {
 
 TEST(TestPutCommand, test_serialize_unpack) {
   auto s = "Hello world";
-  DataChunk dc(strlen(s) + 1, (uint8_t *)s);
-  PutCommand cmd(ChunkKey("apples", 0), make_unique<DataChunk>(dc.data()));
+  DataChunk dc(sized_ptr(strlen(s) + 1, (uint8_t *)s));
+  PutCommand cmd(ChunkKey("apples", 0), dc);
   WriteCursor wc;
   cmd.serialize(wc);
 
@@ -38,9 +38,9 @@ TEST(TestNewCommand, test_serialize_unpack) {
   EXPECT_TRUE(cmd == *cmd2);
 }
 
-TEST(TestMapCommand, test_serialize_unpack) {
+TEST(TestStartMapCommand, test_serialize_unpack) {
   shared_ptr<SumRower> rower = make_shared<SumRower>(0);
-  MapCommand cmd(Key("apples"), rower);
+  StartMapCommand cmd(Key("apples"), rower);
   WriteCursor wc;
   cmd.serialize(wc);
 
@@ -126,7 +126,7 @@ public:
     delete output;
     output = nullptr;
     result = false;
-    return Node::respond_fn_t{[&](bool res, const sized_ptr<uint8_t> &data) {
+    return Node::respond_fn_t{[&](bool res, const DataChunk &data) {
       result = res;
       output = new DataChunk(data);
     }};
@@ -153,8 +153,7 @@ TEST_F(TestCommandRun, test_put) {
   }
   WriteCursor wc;
   dfc.serialize(wc);
-  PutCommand cmd(ChunkKey(key, chunk_idx),
-                 make_unique<DataChunk>(wc.length(), wc.bytes()));
+  PutCommand cmd(ChunkKey(key, chunk_idx), DataChunk(wc));
   /* command run sets output and result */
   cmd.run(*kv, 0, get_respond());
   EXPECT_TRUE(result);
@@ -202,15 +201,22 @@ TEST_F(TestCommandRun, test_new) {
   EXPECT_TRUE(kv->get_pdf(new_key).get_schema() == scm);
 }
 
-TEST_F(TestCommandRun, test_map) {
+TEST_F(TestCommandRun, test_start_map__fetch_map) {
   Key key(string("owned 0"));
   shared_ptr<SumRower> rower = make_shared<SumRower>(0);
-  MapCommand cmd(key, rower);
-  cmd.run(*kv, 0, get_respond());
+  StartMapCommand start_cmd(key, rower);
+  start_cmd.run(*kv, 0, get_respond());
   EXPECT_TRUE(result);
 
   ReadCursor rc(output->data());
-  EXPECT_EQ(rower->get_sum_result(), yield<uint64_t>(rc));
+  int result_id = yield<int>(rc);
+
+  FetchMapResultCommand fetch_cmd(result_id);
+  fetch_cmd.run(*kv, 0, get_respond());
+  EXPECT_TRUE(result);
+
+  ReadCursor rc2(output->data());
+  EXPECT_EQ(rower->get_sum_result(), yield<uint64_t>(rc2));
   EXPECT_TRUE(empty(rc));
 }
 

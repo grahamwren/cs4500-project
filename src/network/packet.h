@@ -59,6 +59,12 @@ public:
 
 static_assert(sizeof(IpV4Addr) == 4, "IpV4Addr was incorrect size");
 
+template <> struct hash<const IpV4Addr> {
+  size_t operator()(const IpV4Addr &ip) const noexcept {
+    return hash<uint32_t>{}(ip);
+  }
+};
+
 enum class PacketType {
   REGISTER,
   NEW_PEER,
@@ -135,28 +141,18 @@ static_assert(sizeof(PacketHeader) == 20, "PacketHeader was incorrect size");
 class Packet {
 public:
   PacketHeader hdr; // 20 bytes
-  unique_ptr<DataChunk> data;
+  DataChunk data;
 
   // build on receive
-  Packet(const PacketHeader &h) : hdr(h), data(new DataChunk) {}
-  Packet(const PacketHeader &h, unique_ptr<uint8_t> &&src_data)
-      : hdr(h), data(new DataChunk(hdr.data_len(), move(src_data))) {}
+  Packet(const PacketHeader &h) : hdr(h) {}
+  Packet(const PacketHeader &h, const shared_ptr<uint8_t> &src_data)
+      : hdr(h), data(hdr.data_len(), src_data) {}
 
   // build to send
   Packet(IpV4Addr src, IpV4Addr dst, PacketType type)
-      : hdr(src, dst, sizeof(PacketHeader), type), data(new DataChunk) {}
-  Packet(IpV4Addr src, IpV4Addr dst, PacketType type,
-         const sized_ptr<uint8_t> &d)
-      : hdr(src, dst, d.len + sizeof(PacketHeader), type),
-        data(new DataChunk(d)) {}
-
-  /**
-   * write the bytes representation of this Packet into the given buffer
-   */
-  void pack(uint8_t *buf) const {
-    hdr.pack(buf);
-    memcpy(buf + sizeof(PacketHeader), data->ptr(), data->len());
-  }
+      : hdr(src, dst, sizeof(PacketHeader), type) {}
+  Packet(IpV4Addr src, IpV4Addr dst, PacketType type, const DataChunk &data)
+      : hdr(src, dst, data.len() + sizeof(PacketHeader), type), data(data) {}
 
   bool ok() const { return hdr.type == PacketType::OK; }
   bool error() const { return hdr.type == PacketType::ERR; }
@@ -206,6 +202,6 @@ ostream &operator<<(ostream &output, const PacketHeader &hdr) {
 
 ostream &operator<<(ostream &output, const Packet &pkt) {
   output << "Packet<" << (void *)&pkt << ">(header: " << pkt.hdr
-         << ", data: " << *(pkt.data) << ")";
+         << ", data: " << pkt.data << ")";
   return output;
 }

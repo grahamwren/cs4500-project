@@ -147,7 +147,7 @@ public:
   template <typename T> void write(T item) {
     static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                   "Type must be trivially copyable");
-    assert(capacity() - length() > sizeof(T));
+    assert(capacity() - length() >= sizeof(T));
     uint8_t *item_ptr = reinterpret_cast<uint8_t *>(&item);
     std::copy(item_ptr, item_ptr + sizeof(T), end());
     _length += sizeof(T);

@@ -15,7 +15,7 @@ public:
         cout << "  DataFrame(" << k.name << "):" << endl;
         cout << "    Schema: " << df_info->get().get_schema() << endl;
         cout << "    Owner: " << df_info->get().get_owner() << endl;
-        cout << "    Num Chunks: " << df_info->get().get_largest_chunk_idx()
+        cout << "    Num Chunks: " << df_info->get().get_largest_chunk_idx() + 1
              << endl;
       }
     }

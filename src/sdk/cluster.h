@@ -74,7 +74,7 @@ protected:
 
   optional<DataChunk> send_cmd(const IpV4Addr &ip, const Command &cmd) const {
     if (CLUSTER_LOG)
-      cout << "Cluster.send(" << cmd << ")" << endl;
+      cout << "Cluster.send(" << ip << ", cmd: " << cmd << ")" << endl;
     WriteCursor wc;
     cmd.serialize(wc);
     return send_cmd(ip, wc);
@@ -82,7 +82,6 @@ protected:
 
   optional<DataChunk> send_cmd(const IpV4Addr &ip,
                                const sized_ptr<uint8_t> &data) const {
-    cout << "sending cmd " << data << endl;
     /* borrow memory from data for DataChunk */
     Packet req(0, ip, PacketType::DATA, DataChunk(data, true));
     Packet resp = DataSock::fetch(req);
@@ -187,17 +186,19 @@ public:
   void map(const Key &key, shared_ptr<Rower> rower) const {
     if (get_df_info(key)) {
       StartMapCommand start_cmd(key, rower);
+      if (CLUSTER_LOG)
+        cout << "Cluster.send(:all, cmd: " << start_cmd << ")" << endl;
       WriteCursor wc;
-      cout << "serializing cmd" << endl;
       start_cmd.serialize(wc);
-      cout << "serializing done" << endl;
       vector<thread> threads;
       unordered_map<const IpV4Addr, int> result_ids;
       mutex results_mtx;
-      for (const IpV4Addr &ip : nodes)
-        threads.emplace_back([&]() {
+      for (const IpV4Addr &ip : nodes) {
+        if (CLUSTER_LOG)
+          cout << "Cluster.start_thread(:start_map, ip: " << ip
+               << ", cmd: " << start_cmd << ")" << endl;
+        threads.emplace_back([&, ip]() {
           optional<DataChunk> result = send_cmd(ip, wc);
-          cout << "sent to " << ip << endl;
           if (result) {
             ReadCursor rc(result->data());
             unique_lock lock(results_mtx);
@@ -208,21 +209,22 @@ public:
                  << endl;
           }
         });
+      }
 
       while (threads.size()) {
         threads.back().join();
         threads.pop_back();
       }
 
-      cout << "Started mapping all nodes: " << key << " " << *rower << endl;
       mutex join_mtx;
-      for (const IpV4Addr &ip : nodes)
-        threads.emplace_back([&]() {
-          int result_id = result_ids.at(ip);
+      for (const IpV4Addr &ip : nodes) {
+        int result_id = result_ids.at(ip);
+        if (CLUSTER_LOG)
+          cout << "Cluster.start_thread(:fetch_map_res, ip: " << ip
+               << ", result_id: " << result_id << ")" << endl;
+        threads.emplace_back([&, ip, result_id]() {
           FetchMapResultCommand fetch_cmd(result_id);
-          cout << "recv results" << endl;
           optional<DataChunk> result = send_cmd(ip, fetch_cmd);
-          cout << "recv results done" << endl;
           if (result) {
             ReadCursor rc(result->data());
             unique_lock lock(join_mtx);
@@ -235,13 +237,12 @@ public:
                  << ")" << endl;
           }
         });
+      }
 
       while (threads.size()) {
         threads.back().join();
         threads.pop_back();
       }
-
-      cout << "Done mapping all nodes" << endl;
     }
   }
 
@@ -326,8 +327,11 @@ public:
       for (int i = 0; i < nodes.size(); i++) {
         dfcs.emplace_back(scm);
         bool good_parse = parser.parse_n_lines(DF_CHUNK_SIZE, dfcs.back());
-        if (!good_parse)
+        if (!good_parse) {
           dfcs.pop_back(); // if parse failed, remove DFC we just added
+          more_to_parse = false;
+          break;
+        }
 
         /* there is more to parse if we successfully filled a chunk */
         more_to_parse = good_parse && dfcs.back().is_full();
@@ -341,8 +345,10 @@ public:
         int ci = chunk_idx++;
         df_info.try_update_largest_chunk_idx(ci);
         const IpV4Addr &ip = seek_in_nodes(df_info.get_owner(), ci);
-        cout << "starting thread to send chunk: " << ci << " to " << ip << endl;
-        threads.emplace_back([&]() {
+        if (CLUSTER_LOG)
+          cout << "Cluster.start_thread(:put_chunk, ip: " << ip
+               << ", key: " << key << ", idx: " << ci << ")" << endl;
+        threads.emplace_back([&, ci, ip]() {
           WriteCursor wc;
           dfc.serialize(wc);
 

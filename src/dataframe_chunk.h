@@ -57,14 +57,12 @@ public:
   const Schema &get_schema() const { return schema; }
 
   void serialize(WriteCursor &wc) const {
-    cout << "serializing dfc" << endl;
     int len = nrows();
     pack(wc, len);
     for (int i = 0; i < schema.width(); i++) {
       assert(columns[i]->length() == len);
       columns[i]->serialize(wc);
     }
-    cout << "done serializing dfc" << endl;
   }
 
   int get_int(int y, int x) const {

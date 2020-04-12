@@ -119,23 +119,16 @@ private:
 
   bool has_term(int cand) const { return terms.find(cand) != terms.end(); }
 
-  // set<int> results;     // old results and new results
   set<int> new_results; // just the new results
 
 public:
   SearchIntIntRower(int result_col, int search_col, const set<int> &terms)
-      : result_col(result_col), search_col(search_col), terms(terms)
-  // , results(old_res)
-  {}
+      : result_col(result_col), search_col(search_col), terms(terms) {}
   SearchIntIntRower(ReadCursor &c)
       : result_col(yield<int>(c)), search_col(yield<int>(c)) {
     int tlen = yield<int>(c);
     for (int i = 0; i < tlen; i++)
       terms.emplace(yield<int>(c));
-
-    // int orlen = yield<int>(c);
-    // for (int i = 0; i < orlen; i++)
-    //   results.emplace(yield<int>(c));
   }
   Type get_type() const { return Type::SEARCH_INT_INT; }
 
@@ -144,11 +137,6 @@ public:
     if (has_term(val)) {
       int cand = row.get<int>(result_col);
       new_results.emplace(cand);
-      // /* if a new result, append to both sets */
-      // if (results.find(cand) == results.end()) {
-      //   // results.emplace(cand);
-      //   new_results.emplace(cand);
-      // }
     }
     return true;
   }
@@ -160,19 +148,13 @@ public:
 
   void serialize(WriteCursor &c) const {
     pack(c, get_type());
-    pack<int>(c, search_col);
     pack<int>(c, result_col);
+    pack<int>(c, search_col);
 
     c.ensure_space(terms.size() * sizeof(int));
     pack<int>(c, terms.size());
     for (int term : terms)
       pack(c, term);
-
-    // /* pack old-results */
-    // c.ensure_space(results.size() * sizeof(int));
-    // pack<int>(c, results.size());
-    // for (int res : results)
-    //   pack(c, res);
   }
 
   void serialize_results(WriteCursor &c) const {

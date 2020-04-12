@@ -1,21 +1,21 @@
 #include "application.h"
 #include "rowers.h"
+#include "utils/cli_flags.h"
 
 class LinusLoadData : public Application {
 public:
   Key commits_key;
-  // Key users_key;
-  // Key projects_key;
+  Key users_key;
+  Key projects_key;
 
   LinusLoadData(const IpV4Addr &ip)
-      : Application(ip), commits_key("commits")
-  //, users_key("users"), projects_key("projects")
-  {}
+      : Application(ip), commits_key("commits"), users_key("users"),
+        projects_key("projects") {}
 
   void ensure_keys_removed() {
     cluster.remove(commits_key);
-    // cluster.remove(users_key);
-    // cluster.remove(projects_key);
+    cluster.remove(users_key);
+    cluster.remove(projects_key);
   }
 
   void fill_cluster() {
@@ -37,24 +37,9 @@ public:
   }
 };
 
-IpV4Addr get_ip(int argc, char **argv) {
-  assert(argc >= 3);
-
-  if (strcmp(argv[1], "--ip") == 0) {
-    return IpV4Addr(argv[2]);
-  } else if (argc > 4 && strcmp(argv[3], "--ip") == 0) {
-    return IpV4Addr(argv[4]);
-  }
-  assert(false);
-}
-
 int main(int argc, char **argv) {
-  cout << "starting with: ";
-  for (int i = 0; i < argc; i++) {
-    cout << argv[i] << ' ';
-  }
-  cout << endl;
+  CliFlags cli;
+  cli.add_flag("--ip").parse(argc, argv);
 
-  LinusLoadData d(get_ip(argc, argv));
-  d.run();
+  LinusLoadData(cli.get_flag("--ip")->c_str()).run();
 }

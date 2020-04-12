@@ -113,7 +113,7 @@ class WriteCursor {
 private:
   long _capacity = 0;
   long _length = 0;
-  std::unique_ptr<uint8_t[]> data;
+  std::unique_ptr<uint8_t, std::function<void(uint8_t *)>> data;
 
   static int get_next_page_size(int len) {
     return std::ceil(len / (float)getpagesize()) * getpagesize();
@@ -122,7 +122,9 @@ private:
   friend class DataChunk;
 
 public:
-  WriteCursor() : _capacity(0), _length(0), data(new uint8_t[0]) {}
+  WriteCursor()
+      : _capacity(0), _length(0),
+        data((uint8_t *)std::malloc(0), [](uint8_t *ptr) { free(ptr); }) {}
   WriteCursor(int len) : WriteCursor() { ensure_space(len); }
   void reset() { _length = 0; }
 

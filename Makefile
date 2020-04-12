@@ -1,4 +1,4 @@
-DEBUG=true
+DEBUG=false
 CC=clang++
 
 ifeq ($(DEBUG),true)
@@ -23,33 +23,30 @@ SHARED_HEADER_FILES=src/**/*
 SRC_DIR=src
 BUILD_DIR=build
 
-run: run_network
+run: APP=linus_compute
+run: build run_app
 
-build: $(BUILD_DIR)/demo.exe
+build:
+	make launch_cluster
+	make run_app APP=linus_load_data
 
 valgrind: DEBUG=true
-valgrind: CCOPTS += -DNUM_ROWS=10000 -DDF_CHUNK_SIZE=4096
+valgrind: CCOPTS += -DDF_CHUNK_SIZE=4096
 valgrind: docker_net_valgrind
 
 test: FORCE
 	cd test && make
 
-$(BUILD_DIR)/example.exe: $(SRC_DIR)/example.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
-
-$(BUILD_DIR)/node_example.exe: $(SRC_DIR)/node_example.cpp $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
-
 $(BUILD_DIR)/kv_node.exe: $(SRC_DIR)/kv_node.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@
 
-$(BUILD_DIR)/linus_load_data.exe: $(SRC_DIR)/linus_load_data.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/linus_load_data.exe: $(SRC_DIR)/examples/linus_load_data.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
-$(BUILD_DIR)/linus_compute.exe: $(SRC_DIR)/linus_compute.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/linus_compute.exe: $(SRC_DIR)/examples/linus_compute.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
-$(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/word_count_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/examples/word_count_demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/dump_cluster_state.exe: $(SRC_DIR)/utils/dump_cluster_state.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
@@ -58,7 +55,10 @@ $(BUILD_DIR)/dump_cluster_state.exe: $(SRC_DIR)/utils/dump_cluster_state.cpp $(B
 $(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
-$(BUILD_DIR)/bench.exe: $(SRC_DIR)/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/bench.exe: $(SRC_DIR)/examples/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
+	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
+
+$(BUILD_DIR)/df_builder.exe: $(SRC_DIR)/utils/df_builder.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)

@@ -129,7 +129,8 @@ public:
       cout << "DataSock.recv_hdr(hdr: " << hdr << ")" << endl;
 
     if (hdr.data_len() > 0) {
-      unique_ptr<uint8_t> recv_buf(new uint8_t[hdr.data_len()]);
+      shared_ptr<uint8_t> recv_buf(new uint8_t[hdr.data_len()],
+                                   [](uint8_t *ptr) { delete[] ptr; });
       int recv_bytes = 0;
       while (recv_bytes < hdr.data_len()) {
         int recv_len = min(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
@@ -141,7 +142,7 @@ public:
           cout << "DataSock.recv_data(" << recv_bytes << " out of "
                << hdr.data_len() << ")" << endl;
       }
-      return Packet(hdr, move(recv_buf));
+      return Packet(hdr, recv_buf);
     } else {
       return Packet(hdr);
     }

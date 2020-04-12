@@ -16,7 +16,7 @@ TEST(TestCursor, test_pack_yield) {
   string s("applesauce");
   pack<const string &>(wc, s);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   EXPECT_EQ(yield<int>(rc), 2);
   EXPECT_EQ(yield<float>(rc), 4.5f);
   EXPECT_EQ(yield<bool>(rc), true);

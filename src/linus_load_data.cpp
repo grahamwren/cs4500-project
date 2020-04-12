@@ -20,13 +20,13 @@ public:
 
   void fill_cluster() {
     bool import_res;
-    // import_res = cluster.load_file(projects_key, "/datasets/projects.ltgt");
+    // import_res = cluster.load_file(projects_key, "./datasets/projects.ltgt");
     // cout << "Loaded: projects" << endl;
     // assert(import_res);
-    import_res = cluster.load_file(commits_key, "/datasets/commits.ltgt");
+    import_res = cluster.load_file(commits_key, "./datasets/commits.ltgt");
     cout << "Loaded: commits" << endl;
     assert(import_res);
-    // import_res = cluster.load_file(users_key, "/datasets/users.ltgt");
+    // import_res = cluster.load_file(users_key, "./datasets/users.ltgt");
     // cout << "Loaded: users" << endl;
     // assert(import_res);
   }

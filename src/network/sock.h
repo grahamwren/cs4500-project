@@ -1,6 +1,7 @@
 #pragma once
 
 #include "packet.h"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cstring>
 #include <iostream>
@@ -128,11 +129,10 @@ public:
       cout << "DataSock.recv_hdr(hdr: " << hdr << ")" << endl;
 
     if (hdr.data_len() > 0) {
-      shared_ptr<uint8_t> recv_buf(new uint8_t[hdr.data_len()],
-                                   [](uint8_t *ptr) { delete[] ptr; });
+      unique_ptr<uint8_t> recv_buf(new uint8_t[hdr.data_len()]);
       int recv_bytes = 0;
       while (recv_bytes < hdr.data_len()) {
-        int recv_len = fmin(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
+        int recv_len = min(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
         rres =
             recv(sock_fd, recv_buf.get() + recv_bytes, recv_len, MSG_WAITALL);
         recv_bytes += recv_len;
@@ -141,7 +141,7 @@ public:
           cout << "DataSock.recv_data(" << recv_bytes << " out of "
                << hdr.data_len() << ")" << endl;
       }
-      return Packet(hdr, recv_buf);
+      return Packet(hdr, move(recv_buf));
     } else {
       return Packet(hdr);
     }

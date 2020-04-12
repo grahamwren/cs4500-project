@@ -82,6 +82,7 @@ protected:
 
   optional<DataChunk> send_cmd(const IpV4Addr &ip,
                                const sized_ptr<uint8_t> &data) const {
+    cout << "sending cmd " << data << endl;
     /* borrow memory from data for DataChunk */
     Packet req(0, ip, PacketType::DATA, DataChunk(data, true));
     Packet resp = DataSock::fetch(req);

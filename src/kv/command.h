@@ -15,6 +15,9 @@
 using namespace std;
 
 class Command {
+protected:
+  virtual void serialize_args(WriteCursor &) const = 0;
+
 public:
   enum Type : uint8_t {
     GET,
@@ -30,15 +33,24 @@ public:
   virtual void run(KVStore &, const IpV4Addr &,
                    const Node::respond_fn_t &) const = 0;
   virtual Type get_type() const = 0;
-  virtual void serialize(WriteCursor &) const = 0;
   virtual ostream &out(ostream &) const = 0;
   virtual bool equals(const Command &) const = 0;
+
+  void serialize(WriteCursor &c) const {
+    pack(c, get_type());
+    serialize_args(c);
+  }
   bool operator==(const Command &other) const { return equals(other); }
 };
 
 class GetCommand : public Command {
 private:
   ChunkKey ckey;
+
+protected:
+  void serialize_args(WriteCursor &wc) const {
+    pack<const ChunkKey &>(wc, ckey);
+  }
 
 public:
   GetCommand(const ChunkKey &ckey) : ckey(ckey) {}
@@ -54,15 +66,10 @@ public:
         const DataFrameChunk &dfc = pdf.get_chunk(ckey.chunk_idx);
         WriteCursor wc;
         dfc.serialize(wc);
-        return respond(true, sized_ptr(wc.length(), wc.bytes()));
+        return respond(true, move(wc));
       }
     }
     return respond(false);
-  }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<const ChunkKey &>(wc, ckey);
   }
 
   ostream &out(ostream &output) const {
@@ -83,6 +90,12 @@ class PutCommand : public Command {
 private:
   ChunkKey chunk_key;
   DataChunk data;
+
+protected:
+  void serialize_args(WriteCursor &wc) const {
+    pack<const ChunkKey &>(wc, chunk_key);
+    pack(wc, data.data());
+  }
 
 public:
   PutCommand(const ChunkKey &chunk_key, const DataChunk &dc)
@@ -110,12 +123,6 @@ public:
     }
   }
 
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<const ChunkKey &>(wc, chunk_key);
-    pack(wc, data.data());
-  }
-
   ostream &out(ostream &output) const {
     output << "key: " << chunk_key << ", data: " << data;
     return output;
@@ -134,6 +141,9 @@ class DeleteCommand : public Command {
 private:
   Key key;
 
+protected:
+  void serialize_args(WriteCursor &wc) const { pack<const Key &>(wc, key); }
+
 public:
   DeleteCommand(const Key &key) : key(key) {}
   DeleteCommand(ReadCursor &c) : key(yield<Key>(c)) {}
@@ -145,11 +155,6 @@ public:
   }
 
   Type get_type() const { return Type::DELETE; }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<const Key &>(wc, key);
-  }
 
   ostream &out(ostream &output) const {
     output << "key: " << key;
@@ -170,6 +175,12 @@ private:
   Key key;
   Schema scm;
 
+protected:
+  void serialize_args(WriteCursor &wc) const {
+    pack<const Key &>(wc, key);
+    pack<const Schema &>(wc, scm);
+  }
+
 public:
   NewCommand(const Key &key, const Schema &scm) : key(key), scm(scm) {}
   NewCommand(ReadCursor &c) : key(yield<Key>(c)), scm(yield<Schema>(c)) {}
@@ -184,12 +195,6 @@ public:
   }
 
   Type get_type() const { return Type::NEW; }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<const Key &>(wc, key);
-    pack<const Schema &>(wc, scm);
-  }
 
   ostream &out(ostream &output) const {
     output << "key: " << key << ", scm: " << scm;
@@ -209,16 +214,21 @@ class GetDFInfoCommand : public Command {
 private:
   optional<Key> query_key;
 
+protected:
+  void serialize_args(WriteCursor &wc) const {
+    pack(wc, !!query_key);
+    if (query_key)
+      pack<const Key &>(wc, *query_key);
+  }
+
 public:
   typedef tuple<Key, optional<Schema>, int> result_t;
 
   GetDFInfoCommand() = default;
   GetDFInfoCommand(const optional<Key> &key) : query_key(key) {}
   GetDFInfoCommand(const Key &key) : query_key(key) {}
-  GetDFInfoCommand(ReadCursor &c) {
-    if (yield<bool>(c))
-      query_key = yield<Key>(c);
-  }
+  GetDFInfoCommand(ReadCursor &c)
+      : query_key(yield<bool>(c) ? optional(yield<Key>(c)) : nullopt) {}
   Type get_type() const { return Type::GET_DF_INFO; }
 
   void run(KVStore &kv, const IpV4Addr &src,
@@ -237,7 +247,7 @@ public:
           pack<bool>(wc, false);
         }
         pack<int>(wc, pdf.largest_chunk_idx());
-        return respond(true, sized_ptr(wc.length(), wc.bytes()));
+        return respond(true, move(wc));
       }
       return respond(false);
     } else {
@@ -257,15 +267,8 @@ public:
         }
         pack<int>(wc, pdf.largest_chunk_idx());
       });
-      return respond(true, sized_ptr(wc.length(), wc.bytes()));
+      return respond(true, move(wc));
     }
-  }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack(wc, !!query_key);
-    if (query_key)
-      pack<const Key &>(wc, *query_key);
   }
 
   ostream &out(ostream &output) const { return output; }
@@ -289,6 +292,12 @@ private:
   Key key;
   shared_ptr<Rower> rower;
 
+protected:
+  void serialize_args(WriteCursor &wc) const {
+    pack<const Key &>(wc, key);
+    rower->serialize(wc);
+  }
+
 public:
   StartMapCommand(const Key &key, shared_ptr<Rower> rower)
       : key(key), rower(rower) {
@@ -306,23 +315,17 @@ public:
     WriteCursor wc;
     pack(wc, result_id);
     /* respond OK early with result_id */
-    respond(true, sized_ptr(wc.length(), wc.bytes()));
+    respond(true, move(wc));
 
-    wc.reset();
+    WriteCursor wc2;
 
     /* compute map result */
     PartialDataFrame &pdf = kv.get_pdf(key);
     pdf.map(*rower); // local map
-    rower->serialize_results(wc);
+    rower->serialize_results(wc2);
 
     /* store result under result_id */
-    kv.insert_map_result(result_id, DataChunk(wc));
-  }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<const Key &>(wc, key);
-    rower->serialize(wc);
+    kv.insert_map_result(result_id, move(wc2));
   }
 
   ostream &out(ostream &output) const {
@@ -339,9 +342,17 @@ public:
   }
 };
 
+/**
+ * Command to send to fetch the result of a previous StartMapCommand, takes an
+ * argument of a result_id and looks in the KVStore for data stored under that
+ * id.
+ */
 class FetchMapResultCommand : public Command {
 private:
   int result_id;
+
+protected:
+  void serialize_args(WriteCursor &wc) const { pack<int>(wc, result_id); }
 
 public:
   FetchMapResultCommand(int result_id) : result_id(result_id) {}
@@ -351,17 +362,11 @@ public:
   void run(KVStore &kv, const IpV4Addr &src,
            const Node::respond_fn_t &respond) const {
     if (kv.has_map_result(result_id)) {
-      const DataChunk &result = kv.get_map_result(result_id);
-      respond(true, result.data());
+      respond(true, kv.get_map_result(result_id));
       kv.remove_map_result(result_id);
-      return;
+    } else {
+      respond(false);
     }
-    return respond(false);
-  }
-
-  void serialize(WriteCursor &wc) const {
-    pack(wc, get_type());
-    pack<int>(wc, result_id);
   }
 
   ostream &out(ostream &output) const {

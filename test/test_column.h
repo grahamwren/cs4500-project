@@ -77,7 +77,7 @@ TEST_F(TestColumn, test_get_set) {
 TEST_F(TestColumn, test_serialize_fill_int) {
   WriteCursor wc;
   ic->serialize(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   Column *ic2 = new TypedColumn<int>();
   ic2->fill(ic->length(), rc);
   EXPECT_TRUE(ic->equals(*ic2));
@@ -86,7 +86,7 @@ TEST_F(TestColumn, test_serialize_fill_int) {
 TEST_F(TestColumn, test_serialize_fill_string) {
   WriteCursor wc;
   sc->serialize(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   Column *sc2 = new TypedColumn<string *>();
   sc2->fill(sc->length(), rc);
   EXPECT_TRUE(sc->equals(*sc2));

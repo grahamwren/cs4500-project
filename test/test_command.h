@@ -2,6 +2,7 @@
 
 #include "kv/command.h"
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 
 using namespace std;
@@ -11,19 +12,19 @@ TEST(TestGetCommand, test_serialize_unpack) {
   WriteCursor wc;
   cmd.serialize(wc);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   unique_ptr<Command> cmd2 = Command::unpack(rc);
   EXPECT_TRUE(cmd == *cmd2);
 }
 
 TEST(TestPutCommand, test_serialize_unpack) {
   auto s = "Hello world";
-  DataChunk dc(sized_ptr(strlen(s) + 1, (uint8_t *)s));
+  DataChunk dc(sized_ptr(strlen(s) + 1, (uint8_t *)s), true);
   PutCommand cmd(ChunkKey("apples", 0), dc);
   WriteCursor wc;
   cmd.serialize(wc);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   unique_ptr<Command> cmd2 = Command::unpack(rc);
   EXPECT_TRUE(cmd == *cmd2);
 }
@@ -33,7 +34,7 @@ TEST(TestNewCommand, test_serialize_unpack) {
   WriteCursor wc;
   cmd.serialize(wc);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   unique_ptr<Command> cmd2 = Command::unpack(rc);
   EXPECT_TRUE(cmd == *cmd2);
 }
@@ -44,7 +45,7 @@ TEST(TestStartMapCommand, test_serialize_unpack) {
   WriteCursor wc;
   cmd.serialize(wc);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   unique_ptr<Command> cmd2 = Command::unpack(rc);
   EXPECT_TRUE(cmd == *cmd2);
 }
@@ -54,7 +55,7 @@ TEST(TestGetOwnedCommand, test_serialize_unpack) {
   WriteCursor wc;
   cmd.serialize(wc);
 
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   unique_ptr<Command> cmd2 = Command::unpack(rc);
   EXPECT_TRUE(cmd == *cmd2);
 }
@@ -88,7 +89,7 @@ public:
 
       WriteCursor wc;
       dfc.serialize(wc);
-      ReadCursor rc(wc.length(), wc.bytes());
+      ReadCursor rc = wc;
       pdf.add_df_chunk(0, rc);
     }
 
@@ -113,7 +114,7 @@ public:
       }
       WriteCursor wc;
       dfc.serialize(wc);
-      ReadCursor rc(wc.length(), wc.bytes());
+      ReadCursor rc = wc;
       pdf.add_df_chunk(chunk_idx, rc);
     }
   }
@@ -128,7 +129,9 @@ public:
     result = false;
     return Node::respond_fn_t{[&](bool res, const DataChunk &data) {
       result = res;
-      output = new DataChunk(data);
+      shared_ptr<uint8_t> ptr(new uint8_t[data.len()]);
+      memcpy(ptr.get(), data.data().ptr, data.len());
+      output = new DataChunk(data.len(), ptr);
     }};
   }
 };
@@ -153,7 +156,7 @@ TEST_F(TestCommandRun, test_put) {
   }
   WriteCursor wc;
   dfc.serialize(wc);
-  PutCommand cmd(ChunkKey(key, chunk_idx), DataChunk(wc));
+  PutCommand cmd(ChunkKey(key, chunk_idx), move(wc));
   /* command run sets output and result */
   cmd.run(*kv, 0, get_respond());
   EXPECT_TRUE(result);

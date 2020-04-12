@@ -4,10 +4,10 @@
 class WordCountDemo : public Application {
 public:
   Key data_key;
-  WordCountDemo(const IpV4Addr &ip)
-      : Application(ip), data_key(string("file")) {}
+  WordCountDemo(const IpV4Addr &ip) : Application(ip), data_key("file") {}
 
   void fill_cluster() {
+    cluster.remove(data_key);
     bool import_res = cluster.load_file(data_key, "100k.sor");
     assert(import_res);
   }

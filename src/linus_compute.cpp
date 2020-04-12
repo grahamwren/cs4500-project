@@ -13,16 +13,15 @@
 class LinusDemo : public Application {
 public:
   Key commits_key;
-  // Key users_key;
-  // Key projects_key;
+  Key users_key;
+  Key projects_key;
   set<int> tagged_projects;
   set<int> tagged_users;
   set<int> new_users;
 
   LinusDemo(const IpV4Addr &ip)
-      : Application(ip), commits_key("commits")
-  //, users_key("users"), projects_key("projects")
-  {
+      : Application(ip), commits_key("commits"), users_key("users"),
+        projects_key("projects") {
     tagged_users.emplace(LINUS);
     new_users.emplace(LINUS); // should linus be included?
   }

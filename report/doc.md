@@ -23,32 +23,40 @@ to find the parts it does not own (see Implementation for more).
 
 ![EAU2 Entity Relationship Diagram](https://github.com/grahamwren/cs4500-assignment_1-part2/raw/master/diagram.png)
 
-The ClusterSDK class has the ability to make use of the KV store to manipulate
-dataframes. The SDK accesses the KV store through the KV class. The KV class
-provides an interface to run Commands in the KV store. Commands are
+The Cluster class has the ability to make use of the KV store to manipulate
+dataframes. The Cluster accesses the KV store through the KV class. The KV
+class provides an interface to run Commands in the KV store. Commands are
 serializable objects that do something with the store. Standard commands are
-GET, PUT, NEW, GETOWNED, and MAP. The KV store is distributed over the
-network, and a local KV Store class (different from the KV class) is present on
-each node. The KV class communicates with the local KV by serializing and
-deserializing commands.
+GET, PUT, DELETE, NEW, GET_DF_INFO, START_MAP, and FETCH_MAP_RESULT. The KV
+store is distributed over the network, and a local KV Store class (different
+from the KV class) is present on each node. The KV class communicates with the
+local KVs by serializing and deserializing commands.
 
-This implementation differs from previous implementations in the fact that the
-"Application" (the ClusterSDK + user code) is not running as a node
+The "Application" (the Cluster + user code) is not running as a node
 participating in the network, but rather, communicating with the network. This
 means an application has to send a message to the machine it's running on in
-order to run commands locally, rather than having a separate, faster implementation
-for local operations.
+order to run commands locally, rather than having a separate, faster
+implementation for local operations.
 
 The local KV store, represented by the KVStore object, contains chunks of data
 frames grouped in the PartialDataFrame class. The chunks are organized by the
-ClusterSDK. When a new piece of data is added, a random owner is chosen from
+Cluster class. When a new piece of data is added, a random owner is chosen from
 the cluster. The data is then distributed round-robin over the nodes, in fixed
 size chunks. Calculating the node which a specific chunk is at is a matter
-of finding the owner, and taking the chunk index modulo number of nodes.
+of finding the owner, and taking the chunk index modulo number of nodes.  The
+local KVStore also contains another mapping of an integer id to map results.
+These are the local results of running START_MAP commands over the cluster,
+and are accessed using the FETCH_MAP_RESULT command.
 
 Keys in the KV Store are strings, though one string can represent data spread
 over several nodes. A string key combined with an index can be used to get
 specific chunks.
+
+Commands are serializable objects with a run method.  The run method is passed
+a respond_fn_t, which is a callback that may only be called once, and allows
+the command to make a network response before it finishes performing its
+computation.  This is used in the START_MAP command to allow for parallel
+mapping, by returning an id to request the results of the computation later.
 
 When `put` is called with a new key, the KV adds the new mapping to its
 ownership map and broadcasts a corresponding message to the other nodes in the
@@ -60,20 +68,28 @@ traversing them as a ring, starting at the node where the put request was made.
 The `DataFrame` object itself is a virtual dataframe, that is, it delegates
 to the KV in order to perform its operations.
 
-A computation is run on a dataframe by issuing a `MAP` command with a `Rower`.
-Rowers can be serialized, and in a `MAP`, one Rower is sent over the network
-for each chunk in a piece of data. When a node receives a Rower, it runs the
-computation on the requested chunk. Then, the Rower is reserialized and sent
-back to the application. Once the application receives all the individual
-Rowers, it joins them using join_delete. The computation runs in parallel,
-so rows are likely processed out of order. The results, however, are joined
-in order.
+A computation is run on a dataframe by issuing `START_MAP` commands with a
+`Rower`.  Rowers can be serialized, and in a map, one START_MAP is sent over
+the network containing one serialized Rower, to each node. When a node receives
+a Rower, it responds right away with an integer id that serves as a handle to
+fetch the results later.  It then runs the computation over its
+PartialDataFrame, which maps over all the chunks it owns, in parallel. Then,
+the Rower is reserialized and stored in the KVStore as a map result under the
+aforementioned id.  These results can be fetched with a FETCH_MAP_RESULT
+command.  
+
+The KVStore's map method takes care of issuing the `START_MAP` commands to each
+node. It then waits on each of them by issuing a `FETCH_MAP_RESULT` command.
+This means the map happens in parallel, but the results "finish" in order.  The
+KVStore joins them using `join` from the deserialized rowers. The joins are
+also done in order.
 
 A `Node` is the low-level interface to the networking layer. The node will
 handle network commands automatically, and takes a callback for handling
 application commands. The callback, set through `set_data_handler` by the KV,
 will be used by the KV to handle Application level requests made of this Node
-by other Nodes in the cluster.
+by other Nodes in the cluster.  The callback in KV deserializes the data as a
+Command and calls the Command's run method.
 
 # Use cases
 
@@ -300,23 +316,3 @@ for (auto it = rower.results.begin(); it != rower.results.end(); it++) {
 }
 ```
 
-# Open questions
-
-Currently, computations must be present on all nodes and precompiled. It would
-be more flexible to provide either an interpreted language or a higher level
-language which compiles into some precompiled computations. We have considered
-implementing an AST which looks similar to SQL, or using a scripting language,
-possibly Racket, Lua, or NewLISP.
-
-It is unclear how we'd handle adding or removing nodes from the network. The
-data would have to be redistributed at some point, but this would require
-interrupting computations.
-
-Similarly, our current spec has no redundancy, so if a node were to die, the
-data would be lost.
-
-# Status
-
-`map` is not yet implemented, though computations can be written using get and put.
-
-Once map works, the word count application should be simple.

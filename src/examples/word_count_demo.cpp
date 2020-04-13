@@ -1,5 +1,6 @@
 #include "application.h"
 #include "rowers.h"
+#include "utils/cli_flags.h"
 
 class WordCountDemo : public Application {
 public:
@@ -8,7 +9,7 @@ public:
 
   void fill_cluster() {
     cluster.remove(data_key);
-    bool import_res = cluster.load_file(data_key, "100k.sor");
+    bool import_res = cluster.load_file(data_key, "easy-data/100k.sor");
     assert(import_res);
   }
 
@@ -23,24 +24,12 @@ public:
   }
 };
 
-IpV4Addr get_ip(int argc, char **argv) {
-  assert(argc >= 3);
-
-  if (strcmp(argv[1], "--ip") == 0) {
-    return IpV4Addr(argv[2]);
-  } else if (argc > 4 && strcmp(argv[3], "--ip") == 0) {
-    return IpV4Addr(argv[4]);
-  }
-  assert(false);
-}
-
 int main(int argc, char **argv) {
-  cout << "starting with: ";
-  for (int i = 0; i < argc; i++) {
-    cout << argv[i] << ' ';
-  }
-  cout << endl;
+  CliFlags cli;
+  cli.add_flag("--ip").parse(argc, argv);
+  auto ip = cli.get_flag("--ip");
+  /* ip flag is required */
+  assert(ip);
 
-  WordCountDemo d(get_ip(argc, argv));
-  d.run();
+  WordCountDemo(ip->c_str()).run();
 }

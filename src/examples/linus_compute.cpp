@@ -76,6 +76,8 @@ public:
 int main(int argc, char **argv) {
   CliFlags cli;
   cli.add_flag("--ip").parse(argc, argv);
+  auto ip = cli.get_flag("--ip");
+  assert(ip); // "ip" flag required
 
-  LinusDemo(cli.get_flag("--ip")->c_str()).run();
+  LinusDemo(ip->c_str()).run();
 }

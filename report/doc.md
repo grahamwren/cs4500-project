@@ -316,3 +316,40 @@ for (auto it = rower.results.begin(); it != rower.results.end(); it++) {
 }
 ```
 
+# Notes
+
+Each node in our EAU2 cluster is a `kv_node`, to build this executable use the `build/kv_node.exe` make task and then run it with ip and server ip arguments:
+
+```sh
+$ build/kv_node.exe --ip 172.0.0.2
+```
+
+And on another machine in the network:
+
+```sh
+$ ./build/kv_node.exe --ip 172.0.0.3 --server-ip 172.0.0.2
+```
+
+Once a cluster is running, you can start an app which interacts with this
+cluster. Specifically for our linus implementation, each file can be loaded
+with the `load_file` app:
+
+```sh
+$ ./build/load_file.exe --ip <ip addr in cluster> --key commits --file datasets/commits.ltgt
+$ ./build/load_file.exe --ip <ip addr in cluster> --key projects --file datasets/projects.ltgt
+$ ./build/load_file.exe --ip <ip addr in cluster> --key users --file datasets/users.ltgt
+```
+
+Then the computation is run with the `linus_compute` app:
+
+```sh
+$ ./build/linus_compute.exe --ip <ip addr in cluster>
+```
+
+To run the app with the simple test data just use the default make task. This
+task will launch the cluster in docker, load the there easy-data files into the
+cluster, and then perform the "7 Degrees of Linus" computation on them.
+
+```sh
+$ make run
+```

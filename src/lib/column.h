@@ -9,6 +9,11 @@
 
 using namespace std;
 
+/**
+ * A abstract parent class for the TypedColumn template
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class Column {
 protected:
   const Data::Type type;
@@ -22,19 +27,34 @@ public:
 
   static Column *create(Data::Type);
 
+  /**
+   * fill this column from the given ReadCursor
+   */
   virtual void fill(int, ReadCursor &) = 0;
+  /**
+   * serialize the contents of this column into the given cursor, should have
+   * parity with fill
+   */
   virtual void serialize(WriteCursor &) = 0;
 
+  /**
+   * append a value to this Column
+   */
   virtual void push(int val) = 0;
   virtual void push(float val) = 0;
   virtual void push(bool val) = 0;
   virtual void push(string *val) = 0;
+  /* push missing */
   virtual void push() = 0;
 
+  /**
+   * set a value in the column
+   */
   virtual void set(int y, int val) = 0;
   virtual void set(int y, float val) = 0;
   virtual void set(int y, bool val) = 0;
   virtual void set(int y, string *val) = 0;
+  /* set missing at y */
   virtual void set(int y) = 0;
 
   virtual int get_int(int y) const = 0;
@@ -49,6 +69,11 @@ public:
   int length() const { return missings.size(); }
 };
 
+/**
+ * A template which represents contiguous storage of it's templated type.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 template <typename T> class TypedColumn : public Column {
 protected:
   vector<T> data;

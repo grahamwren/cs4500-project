@@ -8,6 +8,12 @@
 
 using namespace std;
 
+/**
+ * Represents a set of DataFrameChunks which are stored on a Node. These chunks
+ * are not necessarily contiguous, but all chunks must be full except for the
+ * last one.
+ * authors: @grahamwren, @jagen31
+ */
 class PartialDataFrame : public DataFrame {
 protected:
   const Schema schema;

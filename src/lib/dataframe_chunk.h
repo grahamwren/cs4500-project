@@ -13,6 +13,12 @@
 
 using namespace std;
 
+/**
+ * A class which represents a fixed length chunk of a DataFrame. Designed to be
+ * the chunk which is distributed thoughout the EAU2 cluster.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class DataFrameChunk : public DataFrame {
 private:
   const Schema &schema;

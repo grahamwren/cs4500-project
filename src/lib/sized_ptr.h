@@ -5,6 +5,9 @@
 #include <iostream>
 #include <tuple>
 
+/**
+ * a convenience struct for dealing with pointers and their lengths
+ */
 template <typename E> struct sized_ptr {
   int len;
   E *ptr;

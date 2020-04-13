@@ -14,6 +14,15 @@
 #include <unistd.h>
 #include <vector>
 
+/**
+ * A class to encapsulate reading from a byte array. Constructed from a length
+ * and a bytes ptr, allows yield-ing and peeking objects of many types. Matches
+ * the pack behavior of WriteCursor.
+ *
+ * Also supports checkpoint-ing the cursor position so that a parser can create
+ * a checkpoint and then try to do some parsing and if it fails simply roll the
+ * cursor position back to the checkpoint it created.
+ */
 class ReadCursor {
 public:
   uint8_t const *bytes = nullptr;
@@ -109,6 +118,11 @@ inline void rollback(ReadCursor &c) {
   c.checkpoints->pop();
 }
 
+/**
+ * Encapsulates a dynamically growing bytes buffer for packing objects into.
+ * Users can choose to specialize the pack<T>(WriteCursor &, T) method to
+ * implement their own custom packing logic.
+ */
 class WriteCursor {
 private:
   long _capacity = 0;

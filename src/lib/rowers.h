@@ -8,6 +8,15 @@
 
 using namespace std;
 
+/**
+ * Rower for summing all ints in a given column
+ *
+ * Arguments:
+ * - col  int  column to sum
+ *
+ * Results:
+ * - get_sum_result()  uint64_t  result of summing all the ints in the given
+ */
 class SumRower : public Rower {
 private:
   int col;
@@ -46,6 +55,17 @@ public:
   unique_ptr<Rower> clone() const { return make_unique<SumRower>(col); };
 };
 
+/**
+ * Rower for counting usages of words in the given column of a DF
+ * Arguments:
+ * - col  int  source column for words to count
+ *
+ * Results:
+ * - get_results()  unordered_map<string, int>  A mapping of each word in the
+ *                                              targeted column of the DF to
+ *                                              the numbers of usages of that
+ *                                              word in the targeted column.
+ */
 class WordCountRower : public Rower {
 private:
   int col;
@@ -109,7 +129,18 @@ public:
 };
 
 /**
- * rower for searching and returning distinct int column values
+ * Rower for searching and returning ints from a DF
+ *
+ * Arguments:
+ * - result_col  int  the column to return results from
+ * - search_col  int  the column to match terms in
+ * - terms       set<int>  the set of values to search for in the search_col
+ *
+ * Results:
+ * - get_results()  set<int>  all of the unique ints from the result_col where
+ *                            the value in the search_col was a member of terms
+ *
+ * i.e.: SELECT DISTINCT <result_col> WHERE <search_col> IN (<terms>);
  */
 class SearchIntIntRower : public Rower {
 private:
@@ -181,15 +212,6 @@ public:
     if (terms.size() > 20)
       cout << ", ... " << terms.size() - 20 << " more terms";
     cout << "]"; // AND " << result_col << " NOT IN [";
-
-    // auto or_it = results.begin();
-    // if (results.size() > 0)
-    //   cout << *or_it++;
-    // for (int i = 1; i < 20 && i < results.size(); i++)
-    //   cout << "," << *or_it++;
-    // if (results.size() > 20)
-    //   cout << ", ... " << results.size() - 20 << " more old results";
-    // cout << "]";
   }
 
   set<int> &get_results() { return new_results; }

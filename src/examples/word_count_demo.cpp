@@ -2,6 +2,9 @@
 #include "sdk/application.h"
 #include "utils/cli_flags.h"
 
+/**
+ * Count the usages of the words in the SOR file stored at "easy-data/100k.sor"
+ */
 class WordCountDemo : public Application {
 public:
   Key data_key;

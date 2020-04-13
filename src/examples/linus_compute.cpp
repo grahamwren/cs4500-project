@@ -11,6 +11,14 @@
 #define LINUS 4967
 #endif
 
+/**
+ * EAU2 cluster application to perform the "7 degrees of Linus" computation.
+ * Expects a DataFrame to exist under Key("commits") with the following schema:
+ *
+ * Schema([III], columns: ['ProjectId', 'AuthorId', 'CommitterId']
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class LinusDemo : public Application {
 public:
   Key commits_key;
@@ -22,6 +30,10 @@ public:
   LinusDemo(const IpV4Addr &ip)
       : Application(ip), commits_key("commits"), users_key("users"),
         projects_key("projects") {
+    /* assert the "commits" DF already loaded into the Cluster */
+    assert(cluster.get_df_info(commits_key));
+
+    /* add Linus as first tagged users to search for */
     tagged_users.emplace(LINUS);
   }
 
@@ -29,6 +41,8 @@ public:
     cout << "Step: " << step << endl;
 
     /**
+     * Find all projects contributed to by the currently tagged users:
+     *
      * SELECT col0 project_id
      * FROM commits
      * WHERE author_id IN tagged_users
@@ -45,6 +59,8 @@ public:
     cout << ")" << endl;
 
     /**
+     * Find all users who have contributed to the projects we found above:
+     *
      * SELECT author_id
      * FROM commits
      * WHERE project_id IN new_projects

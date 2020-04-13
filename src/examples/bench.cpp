@@ -5,6 +5,15 @@
 
 using namespace std;
 
+/**
+ * Example benchmarking the parser against a file. Prints the length of the
+ * file in bytes, the schema for the file, whether the parse was successful,
+ * and the time it took to parse the file into a DataFrame in milliseconds.
+ *
+ * Benchmark uses a SimpleDataFrame which is a fully in-memory representation
+ * of a DataFrame.
+ * authors: @grahamwren, @jagen31
+ */
 int main(int argc, char **argv) {
   const char *filename = argc > 1 ? argv[1] : "datafile.sor";
   FILE *fd = fopen(filename, "r");
@@ -19,6 +28,7 @@ int main(int argc, char **argv) {
 
     cout << "starting parsing len " << length << " file " << filename << endl;
     auto t1 = chrono::high_resolution_clock::now();
+
     Parser parser(length, buf);
     Schema scm;
     parser.infer_schema(scm);

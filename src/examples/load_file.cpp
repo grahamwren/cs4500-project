@@ -2,6 +2,12 @@
 #include "sdk/application.h"
 #include "utils/cli_flags.h"
 
+/**
+ * EAU2 cluster application for loading a SOR file into the Cluster. Takes
+ * arguments for the Key to store the file under, the filename to load, and an
+ * IP address in the cluster to register with.
+ * authors: @grahamwren, @jagen31
+ */
 class LoadFile : public Application {
 public:
   Key data_key;

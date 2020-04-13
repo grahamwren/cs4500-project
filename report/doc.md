@@ -43,7 +43,7 @@ frames grouped in the PartialDataFrame class. The chunks are organized by the
 Cluster class. When a new piece of data is added, a random owner is chosen from
 the cluster. The data is then distributed round-robin over the nodes, in fixed
 size chunks. Calculating the node which a specific chunk is at is a matter
-of finding the owner, and taking the chunk index modulo number of nodes.  The
+of finding the owner, and taking the chunk index modulo number of nodes. The
 local KVStore also contains another mapping of an integer id to map results.
 These are the local results of running START_MAP commands over the cluster,
 and are accessed using the FETCH_MAP_RESULT command.
@@ -52,10 +52,10 @@ Keys in the KV Store are strings, though one string can represent data spread
 over several nodes. A string key combined with an index can be used to get
 specific chunks.
 
-Commands are serializable objects with a run method.  The run method is passed
+Commands are serializable objects with a run method. The run method is passed
 a respond_fn_t, which is a callback that may only be called once, and allows
 the command to make a network response before it finishes performing its
-computation.  This is used in the START_MAP command to allow for parallel
+computation. This is used in the START_MAP command to allow for parallel
 mapping, by returning an id to request the results of the computation later.
 
 When `put` is called with a new key, the KV adds the new mapping to its
@@ -69,18 +69,18 @@ The `DataFrame` object itself is a virtual dataframe, that is, it delegates
 to the KV in order to perform its operations.
 
 A computation is run on a dataframe by issuing `START_MAP` commands with a
-`Rower`.  Rowers can be serialized, and in a map, one START_MAP is sent over
+`Rower`. Rowers can be serialized, and in a map, one START_MAP is sent over
 the network containing one serialized Rower, to each node. When a node receives
 a Rower, it responds right away with an integer id that serves as a handle to
-fetch the results later.  It then runs the computation over its
+fetch the results later. It then runs the computation over its
 PartialDataFrame, which maps over all the chunks it owns, in parallel. Then,
 the Rower is reserialized and stored in the KVStore as a map result under the
-aforementioned id.  These results can be fetched with a FETCH_MAP_RESULT
-command.  
+aforementioned id. These results can be fetched with a FETCH_MAP_RESULT
+command.
 
 The KVStore's map method takes care of issuing the `START_MAP` commands to each
 node. It then waits on each of them by issuing a `FETCH_MAP_RESULT` command.
-This means the map happens in parallel, but the results "finish" in order.  The
+This means the map happens in parallel, but the results "finish" in order. The
 KVStore joins them using `join` from the deserialized rowers. The joins are
 also done in order.
 
@@ -88,7 +88,7 @@ A `Node` is the low-level interface to the networking layer. The node will
 handle network commands automatically, and takes a callback for handling
 application commands. The callback, set through `set_data_handler` by the KV,
 will be used by the KV to handle Application level requests made of this Node
-by other Nodes in the cluster.  The callback in KV deserializes the data as a
+by other Nodes in the cluster. The callback in KV deserializes the data as a
 Command and calls the Command's run method.
 
 # Use cases

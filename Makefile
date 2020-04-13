@@ -26,7 +26,7 @@ BUILD_DIR=build
 run: APP=linus_compute
 run: build run_app
 
-build:
+build: FORCE
 	make launch_cluster
 	make run_app APP=linus_load_data
 

@@ -27,8 +27,8 @@ run: APP=linus_compute
 run: build run_app
 
 build: FORCE
-	make launch_cluster
-	make run_app APP=linus_load_data
+	make launch_cluster DEBUG=$(DEBUG)
+	make run_app APP=linus_load_data DEBUG=$(DEBUG)
 
 valgrind: DEBUG=true
 valgrind: CCOPTS += -DDF_CHUNK_SIZE=4096

@@ -1,10 +1,13 @@
 #pragma once
 
 #include "sized_ptr.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <inttypes.h>
 #include <iostream>
+#include <memory>
 #include <stack>
 #include <string>
 #include <type_traits>
@@ -108,42 +111,64 @@ inline void rollback(ReadCursor &c) {
 
 class WriteCursor {
 private:
+  long _capacity = 0;
+  long _length = 0;
+  std::unique_ptr<uint8_t, std::function<void(uint8_t *)>> data;
+
   static int get_next_page_size(int len) {
-    return ceil(len / (float)getpagesize()) * getpagesize();
+    return std::ceil(len / (float)getpagesize()) * getpagesize();
   }
 
-public:
-  std::vector<uint8_t> data;
-  WriteCursor() = default;
-  WriteCursor(int len) { ensure_space(len); }
-  void reset() { data.clear(); }
+  friend class DataChunk;
 
-  operator sized_ptr<uint8_t>() { return sized_ptr(length(), bytes()); }
-  operator ReadCursor() { return ReadCursor(length(), bytes()); }
+public:
+  WriteCursor()
+      : _capacity(0), _length(0),
+        data((uint8_t *)std::malloc(0), [](uint8_t *ptr) { free(ptr); }) {}
+  WriteCursor(int len) : WriteCursor() { ensure_space(len); }
+  void reset() { _length = 0; }
+
+  operator sized_ptr<uint8_t>() { return sized_ptr(length(), begin()); }
+  operator ReadCursor() { return ReadCursor(length(), begin()); }
 
   /**
-   * handle bytes vector resizing manually. Reserve memory manually growing by
-   * the page size until large enough.
-   *
-   * reserving by page size might be overriden by vector's interal growth factor
+   * Reserve memory manually growing by the page size until large enough.
    */
   void ensure_space(int extra_cap) {
-    int rem_cap = data.capacity() - data.size();
-    if (extra_cap > rem_cap) {
-      int new_cap = get_next_page_size(data.capacity() + extra_cap);
-      data.reserve(new_cap);
+    int req_cap = extra_cap + length();
+    if (req_cap > capacity()) {
+      int new_cap = get_next_page_size(req_cap);
+      void *new_ptr = std::realloc(data.get(), new_cap);
+      assert(new_ptr); // out of memory 🤷
+      data.release();
+      data.reset((uint8_t *)new_ptr);
+      _capacity = new_cap;
     }
   }
 
   template <typename T> void write(T item) {
     static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
                   "Type must be trivially copyable");
+    assert(capacity() - length() >= sizeof(T));
     uint8_t *item_ptr = reinterpret_cast<uint8_t *>(&item);
-    data.insert(data.end(), item_ptr, item_ptr + sizeof(T));
+    std::copy(item_ptr, item_ptr + sizeof(T), end());
+    _length += sizeof(T);
   }
 
-  int length() const { return data.size(); }
-  uint8_t *bytes() { return &data[0]; }
+  template <typename T> void write(int len, T *start) {
+    static_assert(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>,
+                  "Type must be trivially copyable");
+    assert(capacity() - length() >= len * sizeof(T));
+    const uint8_t *start_ptr = reinterpret_cast<const uint8_t *>(start);
+    const uint8_t *end_ptr = start_ptr + (len * sizeof(T));
+    std::copy(start_ptr, end_ptr, end());
+    _length += len * sizeof(T);
+  }
+
+  int length() const { return _length; }
+  long capacity() const { return _capacity; }
+  uint8_t *begin() { return data.get(); }
+  uint8_t *end() { return begin() + length(); }
 };
 
 template <typename T> inline void pack(WriteCursor &c, T val) {
@@ -154,21 +179,23 @@ template <typename T> inline void pack(WriteCursor &c, T val) {
 template <> inline void pack(WriteCursor &c, sized_ptr<uint8_t> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(uint8_t) * ptr.len));
   c.write((int)ptr.len);
-  for (int i = 0; i < ptr.len; i++) {
-    c.write(ptr[i]);
-  }
+  c.write(ptr.len, ptr.ptr);
+}
+
+template <> inline void pack(WriteCursor &c, sized_ptr<int> ptr) {
+  c.ensure_space(sizeof(int) + (sizeof(int) * ptr.len));
+  c.write((int)ptr.len);
+  c.write(ptr.len, ptr.ptr);
 }
 
 template <> inline void pack(WriteCursor &c, sized_ptr<const char> ptr) {
   c.ensure_space(sizeof(int) + (sizeof(char) * ptr.len));
   c.write((int)ptr.len);
-  for (int i = 0; i < ptr.len; i++) {
-    c.write(ptr[i]);
-  }
+  c.write(ptr.len, ptr.ptr);
 }
 
 template <> inline void pack(WriteCursor &c, sized_ptr<char> ptr) {
-  pack(c, (sized_ptr<const char>)ptr);
+  pack(c, (const sized_ptr<const char> &)ptr);
 }
 
 template <> inline void pack(WriteCursor &c, std::string *const val) {

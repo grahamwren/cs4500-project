@@ -24,7 +24,7 @@ TEST_F(TestRow, test_width) { EXPECT_EQ(row->width(), 4); }
 TEST_F(TestRow, test_pack_idx_scm_data) {
   WriteCursor wc;
   row->pack_idx_scm_data(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   Row r2(rc);
 
   EXPECT_EQ(row->get<int>(0), r2.get<int>(0));
@@ -36,7 +36,7 @@ TEST_F(TestRow, test_pack_idx_scm_data) {
 TEST_F(TestRow, test_pack_idx_data) {
   WriteCursor wc;
   row->pack_idx_data(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   Row r2(row->get_schema(), rc);
 
   EXPECT_EQ(row->get<int>(0), r2.get<int>(0));

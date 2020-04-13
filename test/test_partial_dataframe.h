@@ -56,7 +56,7 @@ TEST(TestPartialDataFrame, test_add_df_chunk__map) {
 
   WriteCursor wc(12 * 1000);
   dfc.serialize(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   pdf.add_df_chunk(0, rc);
 
   for (int i = 0; i < 1000; i++) {
@@ -86,7 +86,7 @@ TEST(TestPartialDataFrame, test_map_non_contiguous) {
     }
     WriteCursor wc(9 * DF_CHUNK_SIZE);
     dfc.serialize(wc);
-    ReadCursor rc(wc.length(), wc.bytes());
+    ReadCursor rc = wc;
     pdf.add_df_chunk(ci, rc);
   }
 
@@ -102,7 +102,7 @@ TEST(TestPartialDataFrame, test_map_non_contiguous) {
 
   WriteCursor wc(9 * DF_CHUNK_SIZE);
   dfc.serialize(wc);
-  ReadCursor rc(wc.length(), wc.bytes());
+  ReadCursor rc = wc;
   pdf.add_df_chunk(4, rc);
 
   for (int i = DF_CHUNK_SIZE * 4; i < DF_CHUNK_SIZE * 5; i++) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 
 using namespace std;
 
@@ -50,6 +51,8 @@ public:
   virtual void join_serialized(ReadCursor &) { assert(false); }
 
   virtual void out(ostream &output) const { output << "out unimplemented"; }
+
+  virtual unique_ptr<Rower> clone() const = 0;
 };
 
 inline ostream &operator<<(ostream &output, const Rower::Type type) {

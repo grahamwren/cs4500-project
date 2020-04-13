@@ -21,19 +21,26 @@ private:
 public:
   DataChunk() : _len(0), bytes(nullptr) {}
   DataChunk(int n, const shared_ptr<uint8_t> &b) : _len(n), bytes(b) {}
-  /* only copy data from sized_ptr */
+  DataChunk(WriteCursor &&wc) : _len(wc.length()), bytes(wc.data.release()) {
+    wc.data.reset(nullptr);
+    wc._length = 0;
+    wc._capacity = 0;
+  }
+  DataChunk(ReadCursor &c, bool borrow = false)
+      : DataChunk(yield<sized_ptr<uint8_t>>(c), borrow) {}
   DataChunk(const sized_ptr<uint8_t> &sp, bool borrow = false)
       : _len(sp.len),
-        bytes(borrow ? sp.ptr : new uint8_t[_len], [borrow](uint8_t *ptr) {
-          if (!borrow) // only delete ptr if we didn't borrow it
+        bytes(borrow ? sp.ptr : new uint8_t[_len], [=](uint8_t *ptr) {
+          if (!borrow) // only delete ptr we are NOT borrowing
             delete[] ptr;
         }) {
-    /* only copy if not borrowing, and there is data to copy */
-    if (!borrow && sp.ptr && sp.len > 0) {
-      memcpy(bytes.get(), sp.ptr, sp.len);
+    /* don't copy if borrowing */
+    if (!borrow && _len > 0) {
+      /* warn for copies */
+      cout << "WARNING: copying " << _len << " bytes" << endl;
+      memcpy(bytes.get(), sp.ptr, _len);
     }
   }
-  DataChunk(ReadCursor &c) : DataChunk(yield<sized_ptr<uint8_t>>(c)) {}
 
   sized_ptr<uint8_t> data() const { return sized_ptr(len(), bytes.get()); }
   int len() const { return _len; }

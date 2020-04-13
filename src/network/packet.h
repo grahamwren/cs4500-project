@@ -74,6 +74,7 @@ enum class PacketType {
   DATA,
   SHUTDOWN
 };
+
 /**
  * POD class to represent a literal header to be sent or consumed over a socket
  * authors: @grahamwren @jagen31

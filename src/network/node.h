@@ -5,7 +5,6 @@
 #include "packet.h"
 #include "sized_ptr.h"
 #include "sock.h"
-#include "thread.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>

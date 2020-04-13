@@ -116,6 +116,7 @@ TEST_F(TestDataFrame, test_filter) {
   class FilterDiv2 : public Rower {
   public:
     bool accept(const Row &r) { return r.get<int>(0) % 2 == 0; }
+    unique_ptr<Rower> clone() const { assert(false); };
   };
 
   FilterDiv2 rower;

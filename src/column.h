@@ -69,6 +69,7 @@ public:
   }
 
   void serialize(WriteCursor &c) {
+    c.ensure_space(length() * (1 + sizeof(T)));
     for (int i = 0; i < length(); i++) {
       if (is_missing(i)) {
         /* pack single byte for missing */

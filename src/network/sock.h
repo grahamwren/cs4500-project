@@ -1,6 +1,7 @@
 #pragma once
 
 #include "packet.h"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cstring>
 #include <iostream>
@@ -132,7 +133,7 @@ public:
                                    [](uint8_t *ptr) { delete[] ptr; });
       int recv_bytes = 0;
       while (recv_bytes < hdr.data_len()) {
-        int recv_len = fmin(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
+        int recv_len = min(MAX_DATA_SIZE, hdr.data_len() - recv_bytes);
         rres =
             recv(sock_fd, recv_buf.get() + recv_bytes, recv_len, MSG_WAITALL);
         recv_bytes += recv_len;

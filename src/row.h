@@ -238,11 +238,7 @@ public:
 
   void print(bool with_meta = false) const {
     if (with_meta) {
-      cout << "Row<" << this << ">(scm: '";
-      for (int i = 0; i < width(); i++) {
-        cout << scm.col_type(i);
-      }
-      cout << "', data: [";
+      cout << "Row<" << this << ">(scm: " << scm << ", data: [";
     }
 
     for (int i = 0; i < width(); i++) {

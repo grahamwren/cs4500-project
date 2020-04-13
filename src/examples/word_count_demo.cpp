@@ -4,6 +4,8 @@
 
 /**
  * Count the usages of the words in the SOR file stored at "easy-data/100k.sor"
+ *
+ * authors: @grahamwren, @jagen31
  */
 class WordCountDemo : public Application {
 public:

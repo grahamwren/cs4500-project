@@ -16,6 +16,8 @@ using namespace std;
  *
  * Results:
  * - get_sum_result()  uint64_t  result of summing all the ints in the given
+ *
+ * authors: @grahamwren, @jagen31
  */
 class SumRower : public Rower {
 private:
@@ -65,6 +67,8 @@ public:
  *                                              targeted column of the DF to
  *                                              the numbers of usages of that
  *                                              word in the targeted column.
+ *
+ * authors: @grahamwren, @jagen31
  */
 class WordCountRower : public Rower {
 private:
@@ -141,6 +145,8 @@ public:
  *                            the value in the search_col was a member of terms
  *
  * i.e.: SELECT DISTINCT <result_col> WHERE <search_col> IN (<terms>);
+ *
+ * authors: @grahamwren, @jagen31
  */
 class SearchIntIntRower : public Rower {
 private:

@@ -3,11 +3,11 @@
 #include "chunk_key.h"
 #include "data_chunk.h"
 #include "kv_store.h"
+#include "lib/rowers.h"
+#include "lib/schema.h"
+#include "lib/sized_ptr.h"
 #include "network/node.h"
 #include "network/packet.h"
-#include "rowers.h"
-#include "schema.h"
-#include "sized_ptr.h"
 #include <iostream>
 #include <memory>
 #include <string>

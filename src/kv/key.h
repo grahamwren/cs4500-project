@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cursor.h"
+#include "lib/cursor.h"
 #include <string>
 
 using namespace std;

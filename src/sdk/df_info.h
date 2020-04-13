@@ -1,8 +1,8 @@
 #pragma once
 
 #include "kv/key.h"
+#include "lib/schema.h"
 #include "network/packet.h"
-#include "schema.h"
 #include <algorithm>
 #include <atomic>
 

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "key.h"
+#include "lib/schema.h"
 #include "partial_dataframe.h"
-#include "schema.h"
 #include <cstdlib>
 #include <functional>
 #include <unordered_map>

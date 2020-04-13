@@ -3,6 +3,7 @@
 #include "cursor.h"
 #include "row.h"
 #include "rower.h"
+#include <set>
 #include <unordered_map>
 
 using namespace std;

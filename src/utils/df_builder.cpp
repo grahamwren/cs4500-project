@@ -1,6 +1,6 @@
-#include "data.h"
-#include "schema.h"
-#include "simple_dataframe.h"
+#include "lib/data.h"
+#include "lib/schema.h"
+#include "lib/simple_dataframe.h"
 #include <cassert>
 #include <cstdlib>
 #include <ctime>

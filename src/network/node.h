@@ -1,9 +1,9 @@
 #pragma once
 
-#include "cursor.h"
 #include "kv/command.h"
+#include "lib/cursor.h"
+#include "lib/sized_ptr.h"
 #include "packet.h"
-#include "sized_ptr.h"
 #include "sock.h"
 #include <algorithm>
 #include <cstring>

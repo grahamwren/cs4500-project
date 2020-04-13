@@ -43,7 +43,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
 
 include_directories(../src)
 
-add_library(parser.o ../src/parser.cpp)
+add_library(parser.o ../src/sdk/parser.cpp)
 target_compile_options(parser.o PRIVATE -g -O0 -std=c++17 -Wall -Wvarargs)
 
 add_executable(test.exe test.cpp)

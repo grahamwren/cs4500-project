@@ -1,7 +1,7 @@
 #pragma once
 
+#include "cursor.h"
 #include "data.h"
-#include "parser.h"
 #include <cassert>
 #include <cstring>
 #include <iostream>

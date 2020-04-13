@@ -1,4 +1,4 @@
-#include "column.h"
+#include "lib/column.h"
 
 class TestColumn : public ::testing::Test {
 public:

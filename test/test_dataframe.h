@@ -1,7 +1,7 @@
 #pragma once
 
+#include "lib/simple_dataframe.h"
 #include "sample_rowers.h"
-#include "simple_dataframe.h"
 
 class TestDataFrame : public ::testing::Test {
 public:

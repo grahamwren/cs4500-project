@@ -1,7 +1,7 @@
 #pragma once
 
-#include "row.h"
-#include "rower.h"
+#include "lib/row.h"
+#include "lib/rower.h"
 #include <algorithm>
 #include <limits.h>
 

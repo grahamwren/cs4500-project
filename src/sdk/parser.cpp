@@ -1,7 +1,7 @@
 #include "parser.h"
-#include "dataframe.h"
-#include "row.h"
-#include "schema.h"
+#include "lib/dataframe.h"
+#include "lib/row.h"
+#include "lib/schema.h"
 
 Parser::Parser(long len, char *d)
     : cursor(len, reinterpret_cast<uint8_t *>(d)) {}

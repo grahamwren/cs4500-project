@@ -1,4 +1,6 @@
-#include "schema.h"
+#pragma once
+
+#include "lib/schema.h"
 
 class TestSchema : public ::testing::Test {
 public:

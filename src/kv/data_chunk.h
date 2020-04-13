@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cursor.h"
-#include "sized_ptr.h"
+#include "lib/cursor.h"
+#include "lib/sized_ptr.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstring>

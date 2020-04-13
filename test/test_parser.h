@@ -1,9 +1,9 @@
 #pragma once
 
-#include "data.h"
-#include "parser.h"
-#include "schema.h"
-#include "simple_dataframe.h"
+#include "lib/data.h"
+#include "lib/schema.h"
+#include "lib/simple_dataframe.h"
+#include "sdk/parser.h"
 
 class TestParser : public ::testing::Test {
 public:

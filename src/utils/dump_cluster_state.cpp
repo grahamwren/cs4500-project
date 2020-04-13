@@ -1,5 +1,5 @@
-#include "application.h"
-#include "rowers.h"
+#include "lib/rowers.h"
+#include "sdk/application.h"
 
 class DumpClusterState : public Application {
 public:

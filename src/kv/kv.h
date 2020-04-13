@@ -4,9 +4,8 @@
 #include "command.h"
 #include "data_chunk.h"
 #include "kv_store.h"
-#include "lru_cache.h"
+#include "lib/schema.h"
 #include "network/node.h"
-#include "schema.h"
 #include <iostream>
 #include <shared_mutex>
 #include <unordered_map>

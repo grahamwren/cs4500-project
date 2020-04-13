@@ -131,16 +131,13 @@ $(BUILD_DIR)/word_count_demo.exe: $(SRC_DIR)/examples/word_count_demo.cpp $(BUIL
 $(BUILD_DIR)/dump_cluster_state.exe: $(SRC_DIR)/utils/dump_cluster_state.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
-$(BUILD_DIR)/demo.exe: $(SRC_DIR)/demo.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
-	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
-
 $(BUILD_DIR)/bench.exe: $(SRC_DIR)/examples/bench.cpp $(BUILD_DIR)/parser.o $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
 $(BUILD_DIR)/df_builder.exe: $(SRC_DIR)/utils/df_builder.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) $< -o $@ $(BUILD_DIR)/parser.o
 
-$(BUILD_DIR)/parser.o: $(SRC_DIR)/parser.cpp $(SHARED_HEADER_FILES)
+$(BUILD_DIR)/parser.o: $(SRC_DIR)/sdk/parser.cpp $(SHARED_HEADER_FILES)
 	CPATH=$(CPATH) $(CC) $(CCOPTS) -c $< -o $@
 
 # UTILS

@@ -14,8 +14,15 @@
 
 using namespace std;
 
+/**
+ * shared parent class for all Commands which you can issue to a KVNode
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class Command {
 protected:
+  /* TODO: clearly an abstraction missing here. Could issue commands by Type and
+   * Args object */
   virtual void serialize_args(WriteCursor &) const = 0;
 
 public:
@@ -30,6 +37,8 @@ public:
   };
   virtual ~Command() {}
   static unique_ptr<Command> unpack(ReadCursor &);
+  /* execute the command, usually by fetching data from or mutating the KVStore
+   * object */
   virtual void run(KVStore &, const IpV4Addr &,
                    const Node::respond_fn_t &) const = 0;
   virtual Type get_type() const = 0;
@@ -43,6 +52,13 @@ public:
   bool operator==(const Command &other) const { return equals(other); }
 };
 
+/**
+ * Request a DataFrameChunk from a node in the cluster, responds with an OK and
+ * the serialized DataFrameChunk in the body if is available in the node,
+ * otherwise responds with an ERR and no data in the body
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class GetCommand : public Command {
 private:
   ChunkKey ckey;
@@ -86,6 +102,14 @@ public:
   }
 };
 
+/**
+ * Put a DataFrameChunk in a Node. Args are a ChunkKey and the DataChunk to be
+ * put in the Node. Responds with an OK and no data when successful, otherwise
+ * an ERR and no data. A NewCommand for this Key must have already been send to
+ * the Node.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class PutCommand : public Command {
 private:
   ChunkKey chunk_key;
@@ -137,6 +161,12 @@ public:
   }
 };
 
+/**
+ * Delete all DataFrameChunks for the given Key in the Node. Responds with OK
+ * and no data.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class DeleteCommand : public Command {
 private:
   Key key;
@@ -170,6 +200,13 @@ public:
   }
 };
 
+/**
+ * Notify a Node of a new DF in the cluster. Includes the Key and the Schema.
+ * Must be sent to a Node before a PutCommand with this Key can be sent to the
+ * Node.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class NewCommand : public Command {
 private:
   Key key;
@@ -210,6 +247,14 @@ public:
   }
 };
 
+/**
+ * Get information about a particular DataFrame on the Node, or about every
+ * DataFrame stored on the Node. Sent with no Args, response is information on
+ * all DataFrames on the Node. Sent with a Key as an Arg, response in
+ * information on just the DataFrame associated with the given Key.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class GetDFInfoCommand : public Command {
 private:
   optional<Key> query_key;
@@ -275,6 +320,7 @@ public:
 
   bool equals(const Command &o) const { return get_type() == o.get_type(); }
 
+  /* used to unpack the results from this Command */
   static void unpack_results(ReadCursor &c, vector<result_t> &results) {
     while (has_next(c)) {
       Key key = yield<Key>(c);
@@ -287,6 +333,17 @@ public:
   }
 };
 
+/**
+ * Start the given Rower on the DataFrame associated with the given Key. Applies
+ * the Rower to all chunks stored on the Node. Responds with OK and a result ID
+ * in the body if the Rower is successfully started. To get the results of the
+ * map, issue a FetchMapResult command with the provided result ID. After
+ * responding, this Command blocks the main thread of the Node until it is
+ * successful so the Node will NOT respond to packets or commands until it is
+ * done mapping.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class StartMapCommand : public Command {
 private:
   Key key;
@@ -345,7 +402,9 @@ public:
 /**
  * Command to send to fetch the result of a previous StartMapCommand, takes an
  * argument of a result_id and looks in the KVStore for data stored under that
- * id.
+ * id. Responds with OK and the serialized result of the Rower if successful.
+ *
+ * authors: @grahamwren, @jagen31
  */
 class FetchMapResultCommand : public Command {
 private:

@@ -20,6 +20,11 @@
 
 using namespace std;
 
+/**
+ * Main interface of the EAU2 SDK. Used by clients to interact with a cluster.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class Cluster {
 private:
   set<IpV4Addr> nodes;

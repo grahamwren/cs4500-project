@@ -7,6 +7,8 @@
 
 /**
  * a convenience struct for dealing with pointers and their lengths
+ *
+ * authors: @grahamwren, @jagen31
  */
 template <typename E> struct sized_ptr {
   int len;

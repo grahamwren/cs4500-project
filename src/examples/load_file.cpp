@@ -32,7 +32,8 @@ public:
 
 int main(int argc, char **argv) {
   CliFlags cli;
-  cli.add_flag("--ip").add_flag("--key").add_flag("--file").parse(argc, argv);
+  cli.add_flag("--ip").add_flag("--key").add_flag("--file").parse(argc, argv,
+                                                                  true);
   auto ip = cli.get_flag("--ip");
   auto key = cli.get_flag("--key");
   auto filename = cli.get_flag("--file");

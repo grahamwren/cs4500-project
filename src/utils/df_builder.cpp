@@ -35,6 +35,14 @@ string *rand_string(string *dest) {
   return dest;
 }
 
+/**
+ * Script for generating dataframes in SOR format for testing parser. Takes 2
+ * positional arguments: first the number of lines and second the schema of the
+ * DataFrame.
+ *
+ * e.g.
+ * $ df_builder 100000 ISFBSSIIIIIIISSBF
+ */
 int main(int argc, char **argv) {
   // use current time as seed for random generator
   srand(time(nullptr));

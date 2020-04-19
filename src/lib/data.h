@@ -7,6 +7,12 @@
 
 using namespace std;
 
+/**
+ * Object to encapsulate union of data types, and to track whether a value is
+ * missing. Only used by Parser.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class Data {
 protected:
   bool missing;
@@ -93,19 +99,6 @@ public:
     data = val;
   }
   void set() { missing = true; }
-};
-
-class TypedData {
-public:
-  Data data;
-  Data::Type type;
-  TypedData() : data(), type(Data::Type::MISSING) {}
-  TypedData(int val) : data(val), type(Data::Type::INT) {}
-  TypedData(float val) : data(val), type(Data::Type::FLOAT) {}
-  TypedData(bool val) : data(val), type(Data::Type::BOOL) {}
-  TypedData(string *val) : data(val), type(Data::Type::STRING) {}
-
-  template <typename T> T get() { return data.get<T>(); }
 };
 
 template <> inline Data::Type Data::get_type<int>() noexcept {

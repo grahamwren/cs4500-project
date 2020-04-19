@@ -31,13 +31,14 @@ public:
   DataChunk(const sized_ptr<uint8_t> &sp, bool borrow = false)
       : _len(sp.len),
         bytes(borrow ? sp.ptr : new uint8_t[_len], [=](uint8_t *ptr) {
-          if (!borrow) // only delete ptr we are NOT borrowing
+          if (!borrow) // only delete ptr if we are NOT borrowing
             delete[] ptr;
         }) {
     /* don't copy if borrowing */
     if (!borrow && _len > 0) {
-      /* warn for copies */
-      cout << "WARNING: copying " << _len << " bytes" << endl;
+      /* warn for big copies, likely should be moves */
+      if (_len > 4096)
+        cout << "WARNING: copying " << _len << " bytes" << endl;
       memcpy(bytes.get(), sp.ptr, _len);
     }
   }

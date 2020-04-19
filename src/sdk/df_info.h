@@ -8,6 +8,12 @@
 
 using namespace std;
 
+/**
+ * Container for information stored by the Cluster SDK to interact with a
+ * DataFrame stored in the EAU2 cluster.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class DFInfo {
 private:
   const Key key;

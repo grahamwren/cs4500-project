@@ -16,15 +16,19 @@ using namespace std;
 #define KV_LOG false
 #endif
 
+/**
+ * A Key-Value (KV) storage Node, runs independently in the cluster. Handles
+ * DATA Packets sent to the owned Node.
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class KV {
 private:
   Node node;
   KVStore data_store;
 
 protected:
-  /**
-   * invoked by node
-   */
+  /* used by the data_handler */
   void handler(const IpV4Addr &src, unique_ptr<Command> cmd,
                const Node::respond_fn_t &respond) {
     if (KV_LOG)

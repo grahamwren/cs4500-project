@@ -7,6 +7,11 @@
 
 using namespace std;
 
+/**
+ * respresents a DataChunk in the cluster. The Key of the dataframe which the
+ * chunk belongs to, and the index of the chunk in the DF
+ * authors: @grahamwren @jagen31
+ */
 class ChunkKey {
 public:
   Key key;

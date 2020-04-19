@@ -88,7 +88,7 @@ docker_clean: FORCE
 	docker ps -a | grep "$(CONT_PREFIX)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
 
 launch_one_node: docker_clean
-	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t kv_node:0.1 .
+	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t $(CONT_PREFIX)-kv_node:0.1 .
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
 
@@ -107,8 +107,8 @@ run_app: build_cont
 	docker run --network clients-project $(CONT_PREFIX)-$(APP):0.1 --ip 172.168.0.2
 
 load_easy_data: FORCE
-	make build_cont APP=load_file
-	make build_cont APP=dump_cluster_state
+	make build_cont APP=load_file DEBUG=$(DEBUG)
+	make build_cont APP=dump_cluster_state DEBUG=$(DEBUG)
 	docker run --network clients-project -v `pwd`/datasets:/eau2/datasets $(CONT_PREFIX)-load_file:0.1 --ip 172.168.0.2 --key commits --file easy-data/commits.ltgt
 	docker run --network clients-project -v `pwd`/datasets:/eau2/datasets $(CONT_PREFIX)-load_file:0.1 --ip 172.168.0.2 --key users --file easy-data/users.ltgt
 	docker run --network clients-project -v `pwd`/datasets:/eau2/datasets $(CONT_PREFIX)-load_file:0.1 --ip 172.168.0.2 --key projects --file easy-data/projects.ltgt

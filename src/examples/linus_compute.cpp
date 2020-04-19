@@ -91,7 +91,7 @@ public:
 
 int main(int argc, char **argv) {
   CliFlags cli;
-  cli.add_flag("--ip").parse(argc, argv);
+  cli.add_flag("--ip").parse(argc, argv, true);
   auto ip = cli.get_flag("--ip");
   assert(ip); // "ip" flag required
 

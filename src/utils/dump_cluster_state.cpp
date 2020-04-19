@@ -1,6 +1,14 @@
 #include "lib/rowers.h"
 #include "sdk/application.h"
+#include "utils/cli_flags.h"
 
+/**
+ * Application for printing what DataFrame are currently available in the
+ * Cluster. Outputs the Key, the Schema, and the number of chunks for each
+ * DataFrame in the cluster
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class DumpClusterState : public Application {
 public:
   DumpClusterState(const IpV4Addr &ip) : Application(ip) {}
@@ -22,24 +30,11 @@ public:
   }
 };
 
-IpV4Addr get_ip(int argc, char **argv) {
-  assert(argc >= 3);
-
-  if (strcmp(argv[1], "--ip") == 0) {
-    return IpV4Addr(argv[2]);
-  } else if (argc > 4 && strcmp(argv[3], "--ip") == 0) {
-    return IpV4Addr(argv[4]);
-  }
-  assert(false);
-}
-
 int main(int argc, char **argv) {
-  cout << "starting with: ";
-  for (int i = 0; i < argc; i++) {
-    cout << argv[i] << ' ';
-  }
-  cout << endl;
+  CliFlags cli;
+  cli.add_flag("--ip").parse(argc, argv, true);
+  auto ip = cli.get_flag("--ip");
+  assert(ip); // "ip" flag required
 
-  DumpClusterState d(get_ip(argc, argv));
-  d.run();
+  DumpClusterState(ip->c_str()).run();
 }

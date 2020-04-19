@@ -36,6 +36,9 @@ public:
 
   /**
    * serialize self, including type and any args into the write cursor
+   *
+   * TODO: same abstraction from Command is missing here, should be able to send
+   * a Rower by { Type, Args }
    */
   virtual void serialize(WriteCursor &) const { assert(false); }
 

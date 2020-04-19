@@ -227,6 +227,9 @@ public:
   };
 };
 
+/**
+ * deserialize a Rower by type
+ */
 inline unique_ptr<Rower> unpack_rower(ReadCursor &c) {
   Rower::Type type = yield<Rower::Type>(c);
   switch (type) {

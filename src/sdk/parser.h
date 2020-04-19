@@ -19,6 +19,11 @@ class Schema;
 class DataFrame;
 class Row;
 
+/**
+ * Limitted SOR format parser. Single-threaded and very fast. Does NOT support
+ * whitespace between or inside SOR values. String values should be surrounded
+ * by quotes and numeric values should be signed.
+ */
 class Parser {
 public:
   ReadCursor cursor;

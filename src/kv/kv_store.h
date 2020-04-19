@@ -9,20 +9,42 @@
 
 using namespace std;
 
+/**
+ * DataStore for a KV Node. Encapsulates the DataFrameChunks (DFCs) stored on
+ * the Node in PartialDataFrames (PDFs) to track the index of each chunk and the
+ * Schema of the parent DataFrame
+ *
+ * authors: @grahamwren, @jagen31
+ */
 class KVStore {
 public:
+  /* return whether this Store knows about the given Key */
   bool has_pdf(const Key &key) const;
+  /* get the PDF for the given Key */
   PartialDataFrame &get_pdf(const Key &key);
+  /* create a PDF in the clsuter for the given Key and Schema */
   PartialDataFrame &add_pdf(const Key &key, const Schema &schema);
+  /* remove the PDF for the given Key, and delete all associated DFCs */
   void remove_pdf(const Key &key);
+  /* apply the given function to every PDF in the Store */
   void
       for_each(function<void(const pair<const Key, PartialDataFrame> &)>) const;
 
+  /* storing Map results */
+
+  /* return whether we have a result for the given result ID */
   bool has_map_result(int) const;
+  /* get the result for the given ID, undefined behavior if missing result for
+   * the given ID */
   const DataChunk &get_map_result(int) const;
+  /* remove the result for the given ID, usually after responding with it */
   void remove_map_result(int);
+  /* get a new result ID to respond to the client, gurantees that the returned
+   * result ID will not conflict with another result ID requested later */
   int get_result_id();
-  void insert_map_result(int, const DataChunk &);
+  /* insert a map result for a given ID, undefined behavior if ID not from
+   * get_result_id */
+  void insert_map_result(int, DataChunk &&);
 
 protected:
   unordered_map<const Key, PartialDataFrame> data;
@@ -75,7 +97,7 @@ int KVStore::get_result_id() {
   return result_id;
 }
 
-void KVStore::insert_map_result(int result_id, const DataChunk &data) {
+void KVStore::insert_map_result(int result_id, DataChunk &&data) {
   assert(has_map_result(result_id));
-  map_results.insert_or_assign(result_id, data);
+  map_results.insert_or_assign(result_id, move(data));
 }

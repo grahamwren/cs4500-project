@@ -7,6 +7,8 @@ using namespace std;
 
 /**
  * represents the name of a DataFrame distributed throughout the cluster
+ *
+ * authors: @grahamwren, @jagen31
  */
 class Key {
 public:

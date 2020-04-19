@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <inttypes.h>
 #include <iostream>
 #include <memory>

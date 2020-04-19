@@ -54,8 +54,15 @@ public:
     tagged_projects.insert(new_proj_res.begin(), new_proj_res.end());
 
     cout << "  tagged projects(";
-    for (auto e : tagged_projects)
-      cout << e << ",";
+    if (tagged_projects.size() > 40)
+      cout << tagged_projects.size() << " projects";
+    else {
+      auto it = tagged_projects.begin();
+      if (tagged_projects.size() > 0)
+        cout << *it++;
+      while (it != tagged_projects.end())
+        cout << "," << *it++;
+    }
     cout << ")" << endl;
 
     /**

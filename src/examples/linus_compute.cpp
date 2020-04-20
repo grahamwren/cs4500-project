@@ -15,7 +15,7 @@
  * EAU2 cluster application to perform the "7 degrees of Linus" computation.
  * Expects a DataFrame to exist under Key("commits") with the following schema:
  *
- * Schema([III], columns: ['ProjectId', 'AuthorId', 'CommitterId']
+ * Schema([III], columns: ['ProjectId', 'AuthorId', 'CommitterId'])
  *
  * authors: @grahamwren, @jagen31
  */

@@ -75,9 +75,9 @@ define docker_net_start
 endef
 
 docker_net_valgrind: DEBUG=true
-docker_net_valgrind: docker_install launch_one_node
-	$(call docker_run, make clean $(BUILD_DIR)/word_count_demo.exe DEBUG="$(DEBUG)")
-	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/word_count_demo.exe --ip 172.168.0.2)
+docker_net_valgrind: docker_install launch_one_node load_easy_data
+	$(call docker_run, make clean $(BUILD_DIR)/linus_compute.exe DEBUG="$(DEBUG)")
+	$(call docker_net_run, valgrind --leak-check=yes $(BUILD_DIR)/linus_compute.exe --ip 172.168.0.2)
 
 docker_install: docker_clean Dockerfile
 	docker build -t $(CONT_PREFIX)-eau2:0.1 .
@@ -90,7 +90,7 @@ docker_clean: FORCE
 launch_one_node: docker_clean
 	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t $(CONT_PREFIX)-kv_node:0.1 .
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
-	docker run -d --network clients-project --ip 172.168.0.2 kv_node:0.1 --ip 172.168.0.2
+	docker run -d --network clients-project --ip 172.168.0.2 $(CONT_PREFIX)-kv_node:0.1 --ip 172.168.0.2
 
 launch_cluster: docker_clean
 	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t $(CONT_PREFIX)-kv_node:0.1 .

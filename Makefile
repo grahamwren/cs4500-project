@@ -84,8 +84,8 @@ docker_install: docker_clean Dockerfile
 	- docker network create --subnet 172.168.0.0/16 clients-project 2>/dev/null
 
 docker_clean: FORCE
-	docker ps | grep "$(CONT_PREFIX)" | awk '{ print $$1 }' | xargs docker kill >/dev/null || echo "Nothing to delete."
-	docker ps -a | grep "$(CONT_PREFIX)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
+	- docker ps | grep "$(CONT_PREFIX)" | awk '{ print $$1 }' | xargs docker kill >/dev/null
+	- docker ps -a | grep "$(CONT_PREFIX)" | awk '{ print $$1 }' | xargs docker rm >/dev/null
 
 launch_one_node: docker_clean
 	docker build --build-arg debug=$(DEBUG) -f Dockerfile.kv -t $(CONT_PREFIX)-kv_node:0.1 .
